@@ -1,0 +1,20 @@
+# Maxfiy va muhit
+.env
+*.env
+!.env.example
+
+# Python
+venv/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Baza
+*.db
+*.sqlite3
+
+# Tizim / muharrir
+.DS_Store
+.idea/
+.vscode/

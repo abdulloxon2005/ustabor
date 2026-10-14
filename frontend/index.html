@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#2563eb" />
+  <title>UstaBor</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <header class="app-header">
+    <span class="brand">UstaBor</span>
+    <a class="btn btn-outline" href="#">Kirish</a>
+  </header>
+
+  <main class="container">
+    <section class="hero">
+      <h1>Uyga usta chaqiring</h1>
+      <p class="muted">Xizmat tanlang, buyurtma bering, usta toping.</p>
+      <a class="btn btn-accent" href="#">Buyurtma berish</a>
+    </section>
+
+    <p id="status" class="muted">Server tekshirilmoqda...</p>
+
+    <h2>Xizmatlar</h2>
+    <div class="grid" id="categories">
+      <div class="card">Santexnik</div>
+      <div class="card">Elektrik</div>
+      <div class="card">Konditsioner</div>
+      <div class="card">Maishiy texnika</div>
+    </div>
+  </main>
+
+  <nav class="bottom-nav">
+    <a class="active" href="index.html"><span class="icon">🏠</span>Asosiy</a>
+    <a href="#"><span class="icon">📋</span>Buyurtmalar</a>
+    <a href="#"><span class="icon">👤</span>Profil</a>
+  </nav>
+
+  <script src="js/api.js"></script>
+  <script>
+    const el = document.getElementById("status");
+    apiFetch("/health")
+      .then((d) => {
+        el.textContent = "Server ishlayapti: " + d.status;
+        el.className = "ok";
+      })
+      .catch((e) => {
+        el.textContent = "Serverga ulanib bo'lmadi: " + e.message;
+        el.className = "err";
+      });
+  </script>
+</body>
+</html>

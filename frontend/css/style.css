@@ -1,0 +1,221 @@
+/* ===== Ranglar va o'lchamlar ===== */
+:root {
+  --primary: #2563eb;
+  --primary-dark: #1d4ed8;
+  --accent: #f97316;
+  --bg: #f4f6fb;
+  --card: #ffffff;
+  --text: #111827;
+  --muted: #6b7280;
+  --border: #e5e7eb;
+  --ok: #1a7f37;
+  --err: #cf222e;
+  --radius: 14px;
+  --nav-h: 60px;
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+  /* pastki menyu kontentni yopib qo'ymasligi uchun */
+  padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom));
+}
+
+img { max-width: 100%; height: auto; }
+a { color: var(--primary); text-decoration: none; }
+
+/* ===== Tepa panel ===== */
+.app-header {
+  order: -2;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+}
+.brand { font-weight: 700; font-size: 1.25rem; color: var(--primary); }
+
+/* ===== Asosiy kontent ===== */
+.container {
+  flex: 1;
+  width: 100%;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 16px;
+}
+h1 { font-size: 1.5rem; margin: 0 0 8px; }
+h2 { font-size: 1.15rem; margin: 24px 0 12px; }
+.muted { color: var(--muted); font-size: 0.9rem; }
+.ok { color: var(--ok); }
+.err { color: var(--err); }
+
+/* ===== Pastki menyu (telefon) ===== */
+.bottom-nav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10;
+  height: calc(var(--nav-h) + env(safe-area-inset-bottom));
+  padding-bottom: env(safe-area-inset-bottom);
+  display: flex;
+  background: var(--card);
+  border-top: 1px solid var(--border);
+}
+.bottom-nav a {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.bottom-nav a .icon { font-size: 1.3rem; line-height: 1; }
+.bottom-nav a.active { color: var(--primary); font-weight: 600; }
+
+/* ===== Kartochka va setka ===== */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 12px;
+}
+.card-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+
+.grid { display: grid; gap: 12px; grid-template-columns: repeat(2, 1fr); }
+
+.hero {
+  background: linear-gradient(135deg, #dbeafe, #fde7d8);
+  border-radius: var(--radius);
+  padding: 20px 16px;
+  margin-bottom: 16px;
+}
+
+/* ===== Tugmalar ===== */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn:hover { background: var(--primary-dark); }
+.btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.btn-block { width: 100%; }
+.btn-accent { background: var(--accent); }
+.btn-outline { background: #fff; color: var(--primary); border: 1px solid var(--border); }
+.btn-danger { background: var(--err); }
+
+/* ===== Forma ===== */
+label { display: block; font-weight: 600; margin: 12px 0 6px; }
+input, select, textarea {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fff;
+  font: inherit;
+  font-size: 16px; /* iPhone avtomatik kattalashtirmasligi uchun */
+}
+textarea { min-height: 96px; resize: vertical; }
+input:focus, select:focus, textarea:focus {
+  outline: 2px solid var(--primary);
+  border-color: transparent;
+}
+.form-error { color: var(--err); margin-top: 12px; min-height: 1.2em; }
+
+/* ===== Holat belgilari ===== */
+.badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  background: #e5e7eb;
+  color: #374151;
+}
+.badge-searching   { background: #fef3c7; color: #92400e; }
+.badge-assigned    { background: #dbeafe; color: #1e40af; }
+.badge-in_progress { background: #ede9fe; color: #5b21b6; }
+.badge-completed   { background: #dcfce7; color: #166534; }
+.badge-cancelled   { background: #fee2e2; color: #991b1b; }
+
+/* ===== Jadval (admin) ===== */
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; background: var(--card); }
+th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+th { font-size: 0.85rem; color: var(--muted); }
+
+/* Telefonda jadval qatori kartochkaga aylanadi.
+   HTMLda har <td> ga data-label="Ustun nomi" yoziladi */
+@media (max-width: 599px) {
+  table.stack thead { display: none; }
+  table.stack, table.stack tbody, table.stack tr, table.stack td { display: block; width: 100%; }
+  table.stack tr {
+    margin-bottom: 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 6px 0;
+  }
+  table.stack td {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    border: 0;
+    padding: 6px 12px;
+  }
+  table.stack td::before {
+    content: attr(data-label);
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+}
+
+/* ===== Planshet va kompyuter ===== */
+@media (min-width: 600px) {
+  .grid { grid-template-columns: repeat(3, 1fr); }
+  .container { padding: 24px; }
+}
+
+@media (min-width: 768px) {
+  body { padding-bottom: 0; }
+
+  /* Pastki menyu kompyuterda tepaga ko'chadi */
+  .bottom-nav {
+    order: -1;
+    position: static;
+    height: auto;
+    padding: 0 24px;
+    justify-content: center;
+    gap: 8px;
+  }
+  .bottom-nav a { flex: none; flex-direction: row; gap: 8px; padding: 12px 16px; font-size: 0.95rem; }
+}
+
+@media (min-width: 1024px) {
+  .grid { grid-template-columns: repeat(4, 1fr); }
+}
