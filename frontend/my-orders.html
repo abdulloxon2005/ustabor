@@ -63,7 +63,10 @@
       // Sarlavha qatori: kategoriya + holat
       const row = document.createElement("div");
       row.className = "card-row";
-      const cat = document.createElement("strong");
+      const cat = document.createElement("a");
+      cat.href = "order-detail.html?id=" + o.id;
+      cat.style.fontWeight = "700";
+      cat.style.color = "var(--text)";
       cat.textContent = o.category_name;
       const badge = document.createElement("span");
       badge.className = "badge badge-" + o.status;
@@ -252,6 +255,14 @@
         });
         card.appendChild(btn);
       }
+      // Batafsil sahifasiga o'tish
+      const detailLink = document.createElement("a");
+      detailLink.className = "btn btn-outline btn-block";
+      detailLink.style.marginTop = "10px";
+      detailLink.textContent = "Batafsil ko'rish →";
+      detailLink.href = "order-detail.html?id=" + o.id;
+      card.appendChild(detailLink);
+
       return card;
     }
 

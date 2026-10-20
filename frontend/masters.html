@@ -74,10 +74,10 @@
       const rating = document.createElement("span");
       if (m.rating_count > 0) {
         rating.className = "rating";
-        rating.textContent = "★ " + m.rating_avg.toFixed(1) + " (" + m.rating_count + ")";
+        rating.textContent = "★ " + m.rating_avg.toFixed(1) + " (" + m.rating_count + " sharh)";
       } else {
         rating.className = "badge";
-        rating.textContent = "Yangi usta";
+        rating.textContent = "Yangi usta (0 sharh)";
       }
       head.append(name, rating);
 
@@ -112,6 +112,89 @@
         });
         card.appendChild(ul);
       }
+
+      // Sharhlar bo'limi
+      const reviewsSection = document.createElement("div");
+      reviewsSection.style.marginTop = "10px";
+
+      const reviewsToggle = document.createElement("button");
+      reviewsToggle.type = "button";
+      reviewsToggle.className = "btn btn-outline";
+      reviewsToggle.style.minHeight = "36px";
+      reviewsToggle.style.padding = "0 12px";
+      reviewsToggle.style.fontSize = "0.85rem";
+      reviewsToggle.textContent = "Sharhlar (" + m.rating_count + ") ▼";
+
+      const reviewsList = document.createElement("div");
+      reviewsList.style.display = "none";
+      reviewsList.style.marginTop = "8px";
+      reviewsList.style.padding = "8px 10px";
+      reviewsList.style.background = "#f9fafb";
+      reviewsList.style.border = "1px solid var(--border)";
+      reviewsList.style.borderRadius = "8px";
+
+      let reviewsLoaded = false;
+      reviewsToggle.addEventListener("click", async () => {
+        if (reviewsList.style.display === "none") {
+          reviewsList.style.display = "block";
+          reviewsToggle.textContent = "Sharhlar ▲";
+          if (!reviewsLoaded) {
+            reviewsList.textContent = "Sharhlar yuklanmoqda...";
+            try {
+              const res = await apiFetch("/masters/" + m.id + "/reviews");
+              const items = res.reviews || res.items || [];
+              reviewsList.replaceChildren();
+              if (!items.length) {
+                const emptyP = document.createElement("p");
+                emptyP.className = "muted";
+                emptyP.style.margin = "4px 0";
+                emptyP.textContent = "Hali sharh yo'q";
+                reviewsList.appendChild(emptyP);
+              } else {
+                items.forEach((r) => {
+                  const rCard = document.createElement("div");
+                  rCard.style.padding = "6px 0";
+                  rCard.style.borderBottom = "1px solid var(--border)";
+
+                  const rHead = document.createElement("div");
+                  rHead.style.display = "flex";
+                  rHead.style.justifyContent = "space-between";
+                  rHead.style.fontSize = "0.85rem";
+
+                  const rAuthor = document.createElement("strong");
+                  rAuthor.textContent = r.customer_first_name;
+
+                  const rStars = document.createElement("span");
+                  rStars.className = "rating";
+                  rStars.textContent = "★ " + r.rating;
+
+                  rHead.append(rAuthor, rStars);
+                  rCard.appendChild(rHead);
+
+                  if (r.comment) {
+                    const rComment = document.createElement("p");
+                    rComment.style.margin = "4px 0 0";
+                    rComment.style.fontSize = "0.85rem";
+                    rComment.textContent = r.comment;
+                    rCard.appendChild(rComment);
+                  }
+
+                  reviewsList.appendChild(rCard);
+                });
+              }
+              reviewsLoaded = true;
+            } catch (err) {
+              reviewsList.textContent = "Xatolik: " + err.message;
+            }
+          }
+        } else {
+          reviewsList.style.display = "none";
+          reviewsToggle.textContent = "Sharhlar (" + m.rating_count + ") ▼";
+        }
+      });
+
+      reviewsSection.append(reviewsToggle, reviewsList);
+      card.appendChild(reviewsSection);
 
       if (orderId && user && user.role === "customer") {
         const chooseBtn = document.createElement("button");

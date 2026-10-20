@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.api.deps import require_role
 from app.db.session import get_db
-from app.models import Category, MasterProfile, MasterService, Order, OrderOffer, User
+from app.models import Category, MasterProfile, MasterService, Order, OrderOffer, Review, User
 from app.models.enums import OfferStatus, OrderStatus, PricingType, QuoteStatus, Role
 from app.schemas.master import (
     AvailabilityIn,
@@ -24,6 +24,7 @@ from app.schemas.master import (
     ServiceOut,
 )
 from app.schemas.quote import QuoteOut
+from app.schemas.review import MasterReviewItem, MasterReviewsOut
 from app.services import matching
 
 router = APIRouter(prefix="/masters", tags=["masters"])
@@ -377,3 +378,55 @@ def get_master(master_id: int, db: Session = Depends(get_db)):
     if profile is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Usta topilmadi")
     return _public(profile)
+
+
+@router.get("/{master_id}/reviews", response_model=MasterReviewsOut)
+def list_master_reviews(
+    master_id: int,
+    limit: int = 20,
+    offset: int = 0,
+    db: Session = Depends(get_db),
+):
+    profile = db.scalar(
+        select(MasterProfile)
+        .join(User, User.id == MasterProfile.user_id)
+        .where(
+            MasterProfile.id == master_id,
+            MasterProfile.is_approved.is_(True),
+            User.is_active.is_(True),
+        )
+    )
+    if profile is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Usta topilmadi")
+
+    limit = min(max(limit, 1), 100)
+    offset = max(offset, 0)
+
+    rows = db.execute(
+        select(Review, User.full_name)
+        .join(User, Review.customer_id == User.id)
+        .where(Review.master_id == master_id)
+        .order_by(Review.created_at.desc(), Review.id.desc())
+        .offset(offset)
+        .limit(limit)
+    ).all()
+
+    items = []
+    for rev, full_name in rows:
+        name_parts = (full_name or "").strip().split()
+        first_name = name_parts[0] if name_parts else "Mijoz"
+        items.append(
+            MasterReviewItem(
+                rating=rev.rating,
+                comment=rev.comment,
+                created_at=rev.created_at,
+                customer_first_name=first_name,
+            )
+        )
+
+    return MasterReviewsOut(
+        rating_avg=profile.rating_avg,
+        rating_count=profile.rating_count,
+        reviews=items,
+        items=items,
+    )

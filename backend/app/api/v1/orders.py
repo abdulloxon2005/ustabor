@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.api.deps import require_role
 from app.core.config import settings
 from app.db.session import get_db
-from app.models import Category, MasterProfile, MasterService, Order, OrderOffer, OrderStatusHistory, Quote, User
+from app.models import Category, MasterProfile, MasterService, Order, OrderOffer, OrderStatusHistory, Quote, Review, User
 from app.models.enums import OfferStatus, OrderStatus, Role, SelectionMode
 from app.schemas.order import (
     OfferOut,
@@ -19,7 +19,8 @@ from app.schemas.order import (
     SelectMasterIn,
 )
 from app.schemas.quote import QuoteIn, QuoteOut
-from app.services import matching, pricing
+from app.schemas.review import OrderReviewOut, ReviewCreate, ReviewOut
+from app.services import matching, pricing, reviews
 from app.services.order_flow import assign_master, create_order_history, transition
 
 router = APIRouter(prefix="/orders", tags=["orders"])
@@ -122,6 +123,10 @@ def _order_detail_out(order: Order, db: Session, note: str | None = None) -> Ord
     ]
     final_price = order.agreed_price if order.status == OrderStatus.COMPLETED else None
 
+    rev = db.scalar(select(Review).where(Review.order_id == order.id))
+    review_out = OrderReviewOut(rating=rev.rating, comment=rev.comment, created_at=rev.created_at) if rev else None
+    can_review = bool(order.status == OrderStatus.COMPLETED and rev is None)
+
     return OrderDetailOut(
         id=order.id,
         customer_id=order.customer_id,
@@ -143,6 +148,8 @@ def _order_detail_out(order: Order, db: Session, note: str | None = None) -> Ord
         created_at=order.created_at,
         history=order.history,
         offers=offers,
+        review=review_out,
+        can_review=can_review,
         note=note,
     )
 
@@ -603,3 +610,24 @@ def complete_order(
         net=net,
         detail="Ish muvaffaqiyatli yakunlandi",
     )
+
+
+@router.post("/{order_id}/review", response_model=ReviewOut, status_code=status.HTTP_201_CREATED)
+def submit_order_review(
+    order_id: int,
+    data: ReviewCreate,
+    user: User = Depends(require_role(Role.CUSTOMER)),
+    db: Session = Depends(get_db),
+):
+    order = _own_order(order_id, user, db)
+    rev = reviews.create_review(
+        db=db,
+        order=order,
+        customer=user,
+        rating=data.rating,
+        comment=data.comment,
+    )
+    db.commit()
+    db.refresh(rev)
+    return rev
+

@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.enums import OrderStatus, SelectionMode
 from app.schemas.quote import QuoteOut
+from app.schemas.review import OrderReviewOut
 
 
 def _clean(v: str, label: str) -> str:
@@ -140,6 +141,8 @@ class OrderDetailOut(BaseModel):
     created_at: datetime
     history: list[HistoryOut] = []
     offers: list[OfferOut] = []
+    review: OrderReviewOut | None = None
+    can_review: bool = False
     note: str | None = None
 
 
