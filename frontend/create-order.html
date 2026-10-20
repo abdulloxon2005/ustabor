@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#2563eb" />
+  <title>Buyurtma berish - UstaBor</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <header class="app-header">
+    <a class="brand" href="index.html">UstaBor</a>
+  </header>
+
+  <main class="container">
+    <h1>Yangi buyurtma</h1>
+
+    <form id="form" class="card" novalidate>
+
+      <label for="category">Xizmat turi</label>
+      <select id="category" name="category_id" required>
+        <option value="">Yuklanmoqda...</option>
+      </select>
+
+      <label for="description">Tavsif (kamida 5 ta belgi)</label>
+      <textarea id="description" name="description" minlength="5" maxlength="2000"
+                placeholder="Muammoni batafsil tavsiflang" required></textarea>
+
+      <label for="city">Shahar</label>
+      <input id="city" name="city" type="text" maxlength="80" required />
+
+      <label for="district">Tuman</label>
+      <input id="district" name="district" type="text" maxlength="80" required />
+
+      <label for="address">Manzil</label>
+      <input id="address" name="address" type="text" maxlength="255"
+             placeholder="Ko'cha, uy raqami" required />
+
+      <label id="mode-label">Usta tanlash usuli</label>
+      <div class="segmented" role="radiogroup" aria-labelledby="mode-label">
+        <label>
+          <input type="radio" name="selection_mode" value="manual" checked />
+          <span>O'zim tanlayman</span>
+        </label>
+        <label>
+          <input type="radio" name="selection_mode" value="automatic" />
+          <span>Tizim tanlasin</span>
+        </label>
+      </div>
+
+      <div id="error" class="form-error" role="alert"></div>
+      <button id="submit" class="btn btn-block btn-accent" type="submit">Buyurtma berish</button>
+    </form>
+  </main>
+
+  <nav class="bottom-nav">
+    <a href="index.html"><span class="icon">🏠</span>Asosiy</a>
+    <a href="my-orders.html"><span class="icon">📋</span>Buyurtmalar</a>
+    <a href="login.html"><span class="icon">👤</span>Profil</a>
+  </nav>
+
+  <script src="js/api.js"></script>
+  <script>
+    const user = requireAuth(["customer"]);
+    if (!user) throw new Error("redirect");
+
+    const form = document.getElementById("form");
+    const submit = document.getElementById("submit");
+    const errorEl = document.getElementById("error");
+    const catSelect = document.getElementById("category");
+
+    // Kategoriyalarni yuklash
+    const preselect = new URLSearchParams(window.location.search).get("category_id");
+
+    apiFetch("/categories")
+      .then((list) => {
+        catSelect.replaceChildren();
+        if (!list.length) {
+          const o = document.createElement("option");
+          o.value = "";
+          o.textContent = "Xizmatlar mavjud emas";
+          catSelect.appendChild(o);
+          return;
+        }
+        list.forEach((c) => {
+          const o = document.createElement("option");
+          o.value = c.id;
+          o.textContent = c.name;
+          if (preselect && String(c.id) === preselect) o.selected = true;
+          catSelect.appendChild(o);
+        });
+      })
+      .catch((e) => {
+        catSelect.replaceChildren();
+        const o = document.createElement("option");
+        o.value = "";
+        o.textContent = "Yuklashda xatolik";
+        catSelect.appendChild(o);
+      });
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      errorEl.textContent = "";
+
+      const payload = {
+        category_id: Number(catSelect.value),
+        description: form.description.value.trim(),
+        city: form.city.value.trim(),
+        district: form.district.value.trim(),
+        address: form.address.value.trim(),
+        selection_mode: form.selection_mode.value,
+      };
+
+      if (!payload.category_id) { errorEl.textContent = "Xizmat turini tanlang"; return; }
+      if (payload.description.length < 5) { errorEl.textContent = "Tavsif kamida 5 ta belgidan iborat bo'lishi kerak"; return; }
+      if (!payload.city) { errorEl.textContent = "Shaharni kiriting"; return; }
+      if (!payload.district) { errorEl.textContent = "Tumanni kiriting"; return; }
+      if (!payload.address) { errorEl.textContent = "Manzilni kiriting"; return; }
+
+      submit.disabled = true;
+      submit.textContent = "Yuborilmoqda...";
+      try {
+        await apiFetch("/orders", { method: "POST", body: JSON.stringify(payload) });
+        window.location.replace("my-orders.html");
+      } catch (err) {
+        errorEl.textContent = err.message;
+        submit.disabled = false;
+        submit.textContent = "Buyurtma berish";
+      }
+    });
+  </script>
+</body>
+</html>

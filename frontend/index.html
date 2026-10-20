@@ -10,31 +10,46 @@
 <body>
   <header class="app-header">
     <span class="brand">UstaBor</span>
-    <a class="btn btn-outline" href="login.html">Kirish</a>
+    <a id="header-btn" class="btn btn-outline" href="login.html">Kirish</a>
   </header>
 
   <main class="container">
     <section class="hero">
       <h1>Uyga usta chaqiring</h1>
       <p class="muted">Xizmat tanlang, buyurtma bering, usta toping.</p>
-      <a class="btn btn-accent" href="#categories">Buyurtma berish</a>
+      <a id="hero-btn" class="btn btn-accent" href="#categories">Buyurtma berish</a>
     </section>
 
     <p id="status" class="muted">Server tekshirilmoqda...</p>
 
-    <h2>Xizmatlar</h2>
+    <h2 id="categories">Xizmatlar</h2>
     <p id="cat-state" class="muted">Yuklanmoqda...</p>
-    <div class="grid" id="categories"></div>
+    <div class="grid" id="cat-grid"></div>
   </main>
 
   <nav class="bottom-nav">
     <a class="active" href="index.html"><span class="icon">🏠</span>Asosiy</a>
-    <a href="#"><span class="icon">📋</span>Buyurtmalar</a>
-    <a href="#"><span class="icon">👤</span>Profil</a>
+    <a id="nav-orders" href="my-orders.html"><span class="icon">📋</span>Buyurtmalar</a>
+    <a id="nav-profile" href="login.html"><span class="icon">👤</span>Profil</a>
   </nav>
 
   <script src="js/api.js"></script>
   <script>
+    // Foydalanuvchi kirganmi?
+    const curUser = getUser();
+    const headerBtn = document.getElementById("header-btn");
+    const heroBtn = document.getElementById("hero-btn");
+
+    if (curUser && getToken()) {
+      headerBtn.textContent = "Chiqish";
+      headerBtn.href = "#";
+      headerBtn.addEventListener("click", (e) => { e.preventDefault(); logout(); });
+      if (curUser.role === "customer") {
+        heroBtn.href = "create-order.html";
+      }
+    }
+
+    // Server holati
     const el = document.getElementById("status");
     apiFetch("/health")
       .then((d) => {
@@ -48,7 +63,7 @@
 
     // Kategoriyalar
     const catState = document.getElementById("cat-state");
-    const catGrid = document.getElementById("categories");
+    const catGrid = document.getElementById("cat-grid");
     apiFetch("/categories")
       .then((list) => {
         if (!list.length) {
@@ -59,7 +74,12 @@
         list.forEach((c) => {
           const a = document.createElement("a");
           a.className = "card category-card";
-          a.href = "masters.html?category_id=" + encodeURIComponent(c.id);
+          // Kirgan customer buyurtma sahifasiga, aks holda ustalar ro'yxatiga
+          if (curUser && curUser.role === "customer" && getToken()) {
+            a.href = "create-order.html?category_id=" + encodeURIComponent(c.id);
+          } else {
+            a.href = "masters.html?category_id=" + encodeURIComponent(c.id);
+          }
           a.textContent = c.name;
           catGrid.appendChild(a);
         });

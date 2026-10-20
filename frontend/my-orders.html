@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#2563eb" />
+  <title>Buyurtmalarim - UstaBor</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <header class="app-header">
+    <a class="brand" href="index.html">UstaBor</a>
+    <a class="btn btn-accent" href="create-order.html">+ Yangi</a>
+  </header>
+
+  <main class="container">
+    <h1>Buyurtmalarim</h1>
+    <p id="state" class="muted" aria-live="polite">Yuklanmoqda...</p>
+    <div id="list"></div>
+  </main>
+
+  <nav class="bottom-nav">
+    <a href="index.html"><span class="icon">🏠</span>Asosiy</a>
+    <a class="active" href="my-orders.html"><span class="icon">📋</span>Buyurtmalar</a>
+    <a href="login.html"><span class="icon">👤</span>Profil</a>
+  </nav>
+
+  <script src="js/api.js"></script>
+  <script>
+    const user = requireAuth(["customer"]);
+    if (!user) throw new Error("redirect");
+
+    const stateEl = document.getElementById("state");
+    const listEl = document.getElementById("list");
+
+    const STATUS_LABEL = {
+      searching: "Qidirilmoqda",
+      assigned: "Usta tayinlangan",
+      in_progress: "Bajarilmoqda",
+      completed: "Yakunlangan",
+      cancelled: "Bekor qilingan",
+    };
+
+    const CANCELLABLE = new Set(["searching", "assigned"]);
+
+    function renderOrder(o) {
+      const card = document.createElement("div");
+      card.className = "card order-card";
+
+      // Sarlavha qatori: kategoriya + holat
+      const row = document.createElement("div");
+      row.className = "card-row";
+      const cat = document.createElement("strong");
+      cat.textContent = o.category_name;
+      const badge = document.createElement("span");
+      badge.className = "badge badge-" + o.status;
+      badge.textContent = STATUS_LABEL[o.status] || o.status;
+      row.append(cat, badge);
+      card.appendChild(row);
+
+      // Tavsif
+      const desc = document.createElement("p");
+      desc.style.margin = "8px 0 4px";
+      desc.textContent = o.description.length > 120
+        ? o.description.slice(0, 117) + "..."
+        : o.description;
+      card.appendChild(desc);
+
+      // Manzil va sana
+      const meta = document.createElement("p");
+      meta.className = "muted";
+      meta.style.margin = "0";
+      const d = new Date(o.created_at);
+      meta.textContent = o.city + ", " + o.district + " · "
+        + d.toLocaleDateString("uz-Latn") + " " + d.toLocaleTimeString("uz-Latn", {hour:"2-digit", minute:"2-digit"});
+      card.appendChild(meta);
+
+      // Narx
+      if (o.agreed_price != null) {
+        const price = document.createElement("p");
+        price.style.margin = "6px 0 0";
+        price.style.fontWeight = "600";
+        price.textContent = String(o.agreed_price).replace(/\B(?=(\d{3})+(?!\d))/g, " ") + " so'm";
+        card.appendChild(price);
+      }
+
+      // Bekor qilish tugmasi
+      if (CANCELLABLE.has(o.status)) {
+        const btn = document.createElement("button");
+        btn.className = "btn btn-danger btn-block";
+        btn.style.marginTop = "12px";
+        btn.textContent = "Bekor qilish";
+        btn.addEventListener("click", async () => {
+          if (!confirm("Buyurtmani bekor qilishni xohlaysizmi?")) return;
+          btn.disabled = true;
+          btn.textContent = "Bekor qilinmoqda...";
+          try {
+            await apiFetch("/orders/" + o.id + "/cancel", { method: "POST" });
+            load();
+          } catch (err) {
+            alert(err.message);
+            btn.disabled = false;
+            btn.textContent = "Bekor qilish";
+          }
+        });
+        card.appendChild(btn);
+      }
+      return card;
+    }
+
+    async function load() {
+      listEl.replaceChildren();
+      stateEl.textContent = "Yuklanmoqda...";
+      stateEl.className = "muted";
+      try {
+        const orders = await apiFetch("/orders");
+        if (!orders.length) {
+          stateEl.textContent = "";
+          const empty = document.createElement("div");
+          empty.className = "card empty-state";
+          empty.textContent = "Hali buyurtma yo'q";
+          listEl.appendChild(empty);
+          return;
+        }
+        stateEl.textContent = orders.length + " ta buyurtma";
+        orders.forEach((o) => listEl.appendChild(renderOrder(o)));
+      } catch (e) {
+        stateEl.textContent = "Xatolik: " + e.message;
+        stateEl.className = "err";
+      }
+    }
+
+    load();
+  </script>
+</body>
+</html>

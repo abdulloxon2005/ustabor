@@ -286,3 +286,8 @@ body.auth-page { padding-bottom: 0; }
 .master-card .price { font-weight: 600; white-space: nowrap; }
 .rating { color: #b45309; font-weight: 600; white-space: nowrap; }
 .empty-state { text-align: center; padding: 32px 16px; }
+
+
+/* ===== Buyurtma kartochkalari ===== */
+.order-card strong { overflow-wrap: anywhere; }
+.order-card .btn-danger { font-size: 0.9rem; min-height: 40px; }
