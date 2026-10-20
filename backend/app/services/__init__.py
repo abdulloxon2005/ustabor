@@ -1,0 +1,1 @@
+# Biznes mantiq (servis) qatlami
