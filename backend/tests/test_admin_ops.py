@@ -279,6 +279,40 @@ def test_admin_assign_master_ineligible_master_rejected(db):
     assert exc_info.value.detail == "Usta ushbu toifadagi xizmatni ko'rsatmaydi"
 
 
+def test_admin_assign_master_city_check(db):
+    """Boshqa shahardagi ustani biriktirish -> 409 va buyurtma searching holatida qoladi;
+    xuddi shu shahar harf katta-kichikligi yoki bo'shliqlar bilan farq qilsa -> ishlaydi."""
+    cat = _category(db, name="Santexnik", slug="santexnik-city")
+    cust = _user(db, "+998901000081", Role.CUSTOMER)
+    admin = _user(db, "+998901000082", Role.ADMIN)
+
+    order = _order(db, cust, cat, status=OrderStatus.SEARCHING)  # city="Toshkent"
+
+    # Samarqandlik usta (qolgan barcha shartlarga mos) -> 409
+    u_sam = _user(db, "+998901000083", Role.MASTER)
+    mp_sam = _master(db, u_sam, city="Samarkand")
+    _service(db, mp_sam, cat)
+
+    with pytest.raises(HTTPException) as exc_info:
+        admin_assign_master(db, order.id, mp_sam.id, admin)
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail == "Usta boshqa shaharda joylashgan"
+
+    db.refresh(order)
+    assert order.status == OrderStatus.SEARCHING
+    assert order.master_id is None
+
+    # Harf katta-kichikligi va bo'shliqlar bilan farq qiluvchi bir xil shahar -> 200/assigned
+    u_tosh = _user(db, "+998901000084", Role.MASTER)
+    mp_tosh = _master(db, u_tosh, city="  tOShKeNt  ")
+    _service(db, mp_tosh, cat)
+
+    res = admin_assign_master(db, order.id, mp_tosh.id, admin)
+    db.flush()
+    assert res.status == OrderStatus.ASSIGNED
+    assert res.master_id == mp_tosh.id
+
+
 def test_admin_assign_master_non_admin_forbidden(db):
     """Admin bo'lmagan foydalanuvchi biriktira olmaydi (403)."""
     cat = _category(db)

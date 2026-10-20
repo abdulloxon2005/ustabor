@@ -1,6 +1,6 @@
 """HTTP API testlar: Admin boshqaruv paneli (Admin API)."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytest
 from sqlalchemy import select
@@ -379,3 +379,218 @@ def test_admin_commissions_totals_match_full_flow(client, db, signup, admin_head
     assert order_item["agreed_price"] == 200_000
     assert order_item["commission_amount"] == 20_000
     assert order_item["master_net"] == 180_000
+
+
+def test_admin_commissions_date_validation(client, db, signup, admin_headers, make_category):
+    """/admin/commissions sana filtri validatsiyasi:
+    - date_from=not-a-date -> 422
+    - date_from= (bo'sh) -> 200 va filtrsiz kabi ishlaydi
+    - date_to=2026-13-45 -> 422
+    - to'g'ri sanalar ishlaydi.
+    """
+    cat = make_category("Santexnik", "santexnik_comm_dates")
+    h_c, u_c = signup("customer", "+998901230030", "Mijoz Date")
+    h_m, u_m = signup("master", "+998901230031", "Usta Date")
+    mp = _create_master_profile(db, u_m["id"], cat.id, pricing_type=PricingType.FIXED, base_price=100_000)
+
+    order_id = _create_order(client, h_c, cat.id)
+    order = db.get(models.Order, order_id)
+    user_m = db.get(models.User, u_m["id"])
+    assign_master(db, order.id, mp.id, actor=user_m)
+    order.agreed_price = 100_000
+    order.commission_amount = 10_000
+    transition(db, order, OrderStatus.IN_PROGRESS, actor=user_m)
+    transition(db, order, OrderStatus.COMPLETED, actor=user_m)
+    db.commit()
+
+    # Noto'g'ri date_from -> 422
+    r_bad1 = client.get("/api/v1/admin/commissions?date_from=not-a-date", headers=admin_headers)
+    assert r_bad1.status_code == 422
+    assert r_bad1.json()["detail"] == "Sana formati noto'g'ri (YYYY-MM-DD talab qilinadi)"
+
+    # Noto'g'ri date_to -> 422
+    r_bad2 = client.get("/api/v1/admin/commissions?date_to=2026-13-45", headers=admin_headers)
+    assert r_bad2.status_code == 422
+    assert r_bad2.json()["detail"] == "Sana formati noto'g'ri (YYYY-MM-DD talab qilinadi)"
+
+    # Bo'sh date_from -> 200 va filtrsiz kabi ishlaydi
+    r_empty = client.get("/api/v1/admin/commissions?date_from=&date_to=%20%20", headers=admin_headers)
+    assert r_empty.status_code == 200
+    assert r_empty.json()["total_completed_orders"] >= 1
+
+    # To'g'ri YYYY-MM-DD sanalar -> 200
+    today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    r_valid = client.get(
+        f"/api/v1/admin/commissions?date_from={today_str}&date_to={today_str}",
+        headers=admin_headers,
+    )
+    assert r_valid.status_code == 200
+    assert any(o["id"] == order_id for o in r_valid.json()["orders"])
+
+
+def test_admin_commissions_pagination_clamping(client, db, signup, admin_headers, make_category):
+    """limit=1000000 ko'pi bilan 100 ta element qaytaradi va limit=-5 / offset=-3 200 qaytaradi."""
+    cat = make_category("Santexnik", "santexnik_comm_clamp")
+    h_c, u_c = signup("customer", "+998901230040", "Mijoz Clamp")
+    h_m, u_m = signup("master", "+998901230041", "Usta Clamp")
+    mp = _create_master_profile(db, u_m["id"], cat.id)
+
+    for _ in range(105):
+        o = models.Order(
+            customer_id=u_c["id"],
+            category_id=cat.id,
+            master_id=mp.id,
+            description="Clamp test buyurtma",
+            city="Toshkent",
+            district="Chilonzor",
+            address="Test 1",
+            status=OrderStatus.COMPLETED,
+            selection_mode=SelectionMode.MANUAL,
+            agreed_price=100_000,
+            commission_rate=10,
+            commission_amount=10_000,
+        )
+        db.add(o)
+    db.commit()
+
+    r_big = client.get("/api/v1/admin/commissions?limit=1000000", headers=admin_headers)
+    assert r_big.status_code == 200
+    data_big = r_big.json()
+    assert data_big["total_completed_orders"] >= 105
+    assert len(data_big["orders"]) == 100
+
+    r_neg = client.get("/api/v1/admin/commissions?limit=-5&offset=-3", headers=admin_headers)
+    assert r_neg.status_code == 200
+    data_neg = r_neg.json()
+    assert len(data_neg["orders"]) == 1
+
+
+def test_admin_patch_routes_auth_and_roles(client, db, signup, admin_headers, make_category):
+    """PATCH /admin/orders/{id}/assign, PATCH /admin/users/{id}/status va
+    PATCH /admin/masters/{id}/approval: anonim -> 401, mijoz -> 403, usta -> 403, admin -> 200."""
+    cat = make_category("Santexnik", "santexnik_patch_auth")
+    h_c, u_c = signup("customer", "+998901230050", "Mijoz PatchAuth")
+    h_m, u_m = signup("master", "+998901230051", "Usta PatchAuth")
+    mp = _create_master_profile(db, u_m["id"], cat.id, is_approved=True, is_available=True)
+    order_id = _create_order(client, h_c, cat.id)
+
+    patch_cases = [
+        (f"/api/v1/admin/orders/{order_id}/assign", {"master_id": mp.id}),
+        (f"/api/v1/admin/users/{u_c['id']}/status", {"is_active": True}),
+        (f"/api/v1/admin/masters/{mp.id}/approval", {"is_approved": True}),
+    ]
+
+    for path, payload in patch_cases:
+        r_anon = client.patch(path, json=payload)
+        assert r_anon.status_code == 401, f"{path} anonim 401 bo'lishi kerak"
+
+        r_cust = client.patch(path, json=payload, headers=h_c)
+        assert r_cust.status_code == 403, f"{path} mijoz 403 bo'lishi kerak"
+
+        r_mast = client.patch(path, json=payload, headers=h_m)
+        assert r_mast.status_code == 403, f"{path} usta 403 bo'lishi kerak"
+
+        r_adm = client.patch(path, json=payload, headers=admin_headers)
+        assert r_adm.status_code == 200, f"{path} admin 200 bo'lishi kerak, {r_adm.status_code} keldi"
+
+
+def test_admin_assign_city_mismatch_and_case_insensitive_match(client, db, signup, admin_headers, make_category):
+    """Toshkent buyurtmasiga Samarkand ustasini biriktirish -> 409 va buyurtma searching qoladi;
+    harf katta-kichikligi/bo'shliqlar bilan farqli Toshkent ustasi -> 200."""
+    cat = make_category("Santexnik", "santexnik_city_api")
+    h_c, u_c = signup("customer", "+998901230060", "Mijoz CityApi")
+    h_m_sam, u_m_sam = signup("master", "+998901230061", "Usta Samarkand")
+    mp_sam = _create_master_profile(db, u_m_sam["id"], cat.id)
+    mp_sam.city = "Samarkand"
+    db.commit()
+
+    order_id = _create_order(client, h_c, cat.id)
+
+    r_mismatch = client.patch(
+        f"/api/v1/admin/orders/{order_id}/assign",
+        json={"master_id": mp_sam.id},
+        headers=admin_headers,
+    )
+    assert r_mismatch.status_code == 409
+    assert r_mismatch.json()["detail"] == "Usta boshqa shaharda joylashgan"
+
+    db.expire_all()
+    order_db = db.get(models.Order, order_id)
+    assert order_db.status == OrderStatus.SEARCHING
+    assert order_db.master_id is None
+
+    # Harf katta-kichikligi va qo'shimcha bo'shliqlar bilan bir xil shahar -> 200
+    h_m_tosh, u_m_tosh = signup("master", "+998901230062", "Usta Toshkent Case")
+    mp_tosh = _create_master_profile(db, u_m_tosh["id"], cat.id)
+    mp_tosh.city = "  tOSHkent "
+    db.commit()
+
+    r_ok = client.patch(
+        f"/api/v1/admin/orders/{order_id}/assign",
+        json={"master_id": mp_tosh.id},
+        headers=admin_headers,
+    )
+    assert r_ok.status_code == 200
+    assert r_ok.json()["status"] == "assigned"
+    assert r_ok.json()["master_id"] == mp_tosh.id
+
+
+def test_strict_int_rejects_booleans_across_endpoints(client, db, signup, admin_headers, make_category):
+    """Fix 2 da tekshirilgan endpointlarda JSON boolean (true/false) -> 422 qaytaradi."""
+    cat = make_category("Santexnik", "santexnik_strict_int")
+    h_c, u_c = signup("customer", "+998901230070", "Mijoz Strict")
+    h_m, u_m = signup("master", "+998901230071", "Usta Strict")
+    mp = _create_master_profile(db, u_m["id"], cat.id, pricing_type=PricingType.QUOTE, base_price=None)
+
+    # 1. OrderCreate.category_id boolean -> 422
+    for b in [True, False]:
+        r_ord_bool = client.post(
+            "/api/v1/orders",
+            json={
+                "category_id": b,
+                "description": "Strict int test buyurtma",
+                "city": "Toshkent",
+                "district": "Chilonzor",
+                "address": "Navoiy 1",
+                "selection_mode": "manual",
+            },
+            headers=h_c,
+        )
+        assert r_ord_bool.status_code == 422
+
+    order_id = _create_order(client, h_c, cat.id)
+
+    # 2. SelectMasterIn.master_id boolean -> 422
+    for b in [True, False]:
+        r_sel_bool = client.post(
+            f"/api/v1/orders/{order_id}/select-master",
+            json={"master_id": b},
+            headers=h_c,
+        )
+        assert r_sel_bool.status_code == 422
+
+    # 3. AdminAssignIn.master_id boolean -> 422
+    for b in [True, False]:
+        r_ass_bool = client.patch(
+            f"/api/v1/admin/orders/{order_id}/assign",
+            json={"master_id": b},
+            headers=admin_headers,
+        )
+        assert r_ass_bool.status_code == 422
+
+    # Ustani haqiqiy id bilan biriktiramiz va quote price boolean -> 422 tekshiramiz
+    r_ass_ok = client.patch(
+        f"/api/v1/admin/orders/{order_id}/assign",
+        json={"master_id": mp.id},
+        headers=admin_headers,
+    )
+    assert r_ass_ok.status_code == 200
+
+    # 4. QuoteIn.price boolean -> 422
+    for b in [True, False]:
+        r_quote_bool = client.post(
+            f"/api/v1/orders/{order_id}/quotes",
+            json={"price": b, "note": "Bool narx"},
+            headers=h_m,
+        )
+        assert r_quote_bool.status_code == 422

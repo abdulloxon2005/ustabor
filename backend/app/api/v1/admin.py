@@ -41,6 +41,10 @@ router = APIRouter(
 SLUG_TAKEN = "Bu slug allaqachon mavjud"
 
 
+def _clamp_pagination(limit: int, offset: int) -> tuple[int, int]:
+    return min(max(limit, 1), 100), max(offset, 0)
+
+
 def _admin_order_detail_out(order: Order, db: Session) -> AdminOrderDetailOut:
     master_name = None
     if order.master and order.master.user:
@@ -203,8 +207,7 @@ def list_admin_orders(
     offset: int = 0,
     db: Session = Depends(get_db),
 ):
-    limit = min(max(limit, 1), 100)
-    offset = max(offset, 0)
+    limit, offset = _clamp_pagination(limit, offset)
 
     stmt = (
         select(Order)
@@ -318,8 +321,7 @@ def list_admin_users(
     offset: int = 0,
     db: Session = Depends(get_db),
 ):
-    limit = min(max(limit, 1), 100)
-    offset = max(offset, 0)
+    limit, offset = _clamp_pagination(limit, offset)
 
     stmt = (
         select(User, MasterProfile)
@@ -403,6 +405,7 @@ def get_commissions_report(
     offset: int = 0,
     db: Session = Depends(get_db),
 ):
+    limit, offset = _clamp_pagination(limit, offset)
     report = admin_ops.commissions_report(
         db=db,
         date_from=date_from,

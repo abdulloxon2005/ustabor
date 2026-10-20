@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, StrictInt
 
 from app.models.enums import (
     OrderStatus,
@@ -104,7 +104,7 @@ class UserStatusIn(BaseModel):
 
 
 class AdminAssignIn(BaseModel):
-    master_id: int
+    master_id: StrictInt
 
 
 class CommissionOrderItem(BaseModel):

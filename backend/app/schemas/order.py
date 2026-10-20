@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator
 
 from app.models.enums import OrderStatus, SelectionMode
 from app.schemas.quote import QuoteOut
@@ -18,7 +18,7 @@ def _clean(v: str, label: str) -> str:
 class OrderCreate(BaseModel):
     """Himoyalangan maydonlar yo'q: status, master_id, agreed_price, commission_*."""
 
-    category_id: int
+    category_id: StrictInt
     description: str = Field(min_length=5, max_length=2000)
     city: str = Field(min_length=1, max_length=80)
     district: str = Field(min_length=1, max_length=80)
@@ -50,7 +50,7 @@ class OrderCreate(BaseModel):
 
 
 class SelectMasterIn(BaseModel):
-    master_id: int
+    master_id: StrictInt
 
 
 class HistoryOut(BaseModel):

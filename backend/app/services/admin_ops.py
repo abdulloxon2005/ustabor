@@ -133,6 +133,11 @@ def admin_assign_master(
         raise HTTPException(status.HTTP_409_CONFLICT, "Usta band yoki faol emas")
     if master.user is None or not master.user.is_active:
         raise HTTPException(status.HTTP_409_CONFLICT, "Usta foydalanuvchisi faol emas")
+    if master.city.strip().lower() != order.city.strip().lower():
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Usta boshqa shaharda joylashgan",
+        )
 
     service = db.scalar(
         select(MasterService).where(
@@ -205,11 +210,22 @@ def _parse_date(d: Any, is_end: bool = False) -> datetime | None:
     if d is None:
         return None
     if isinstance(d, str):
+        d = d.strip()
+        if not d:
+            return None
         # YYYY-MM-DD yoki ISO format
         try:
             dt = datetime.fromisoformat(d)
+            if is_end and len(d) == 10:
+                dt = datetime.combine(dt.date(), time.max)
         except ValueError:
-            dt_date = date.fromisoformat(d)
+            try:
+                dt_date = date.fromisoformat(d)
+            except ValueError:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    "Sana formati noto'g'ri (YYYY-MM-DD talab qilinadi)",
+                )
             dt = datetime.combine(dt_date, time.max if is_end else time.min)
         return dt
     if isinstance(d, datetime):

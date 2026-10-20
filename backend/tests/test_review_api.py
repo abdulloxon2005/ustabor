@@ -240,6 +240,22 @@ def test_review_validation_errors(client, db, signup, make_category):
     )
     assert r_long.status_code == 422
 
+    # StrictInt tekshiruvi: true, false, 3.0, "5" -> barchasi 422
+    for bad_rating in [True, False, 3.0, "5"]:
+        r_bad = client.post(
+            f"/api/v1/orders/{order_id}/review",
+            json={"rating": bad_rating, "comment": "Noto'g'ri tur"},
+            headers=h_c,
+        )
+        assert r_bad.status_code == 422, f"rating={bad_rating!r} uchun 422 kutilgan edi, {r_bad.status_code} keldi"
+
+    # Hech qanday sharh saqlanmagan va ustaning rating_count o'zgarmagan (0)
+    db.expire_all()
+    saved_review = db.scalar(select(models.Review).where(models.Review.order_id == order_id))
+    assert saved_review is None
+    mp_db = db.get(models.MasterProfile, mp.id)
+    assert mp_db.rating_count == 0
+
 
 def test_review_protected_fields_ignored(client, db, signup, make_category):
     cat = make_category("Santexnik", "santexnik_pf")
