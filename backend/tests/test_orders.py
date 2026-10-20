@@ -43,7 +43,7 @@ def test_create_order_ok(client, customer_a, cat):
     assert body["commission_rate"] == 10
     assert body["master_id"] is None
     assert body["agreed_price"] is None
-    assert body["commission_amount"] is None
+    assert "commission_amount" not in body
     assert body["category_name"] == "Santexnik"
     assert body["customer_id"] == user["id"]
     assert body["selection_mode"] == "manual"
@@ -111,7 +111,7 @@ def test_protected_fields_ignored(client, customer_a, cat):
     assert body["master_id"] is None
     assert body["agreed_price"] is None
     assert body["commission_rate"] == 10
-    assert body["commission_amount"] is None
+    assert "commission_amount" not in body
 
 
 # ---------- ro'yxat ----------

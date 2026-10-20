@@ -138,17 +138,31 @@ def accept_quote(
             "Narx taklifi bu buyurtmaga tegishli emas",
         )
 
-    if quote.status != QuoteStatus.PROPOSED:
-        if order.agreed_price is not None:
+    # 1. Kotirovkani atomik tasdiqlash (faqat PROPOSED holatida bo'lsa)
+    quote_res = db.execute(
+        update(Quote)
+        .where(
+            Quote.id == quote.id,
+            Quote.order_id == order.id,
+            Quote.status == QuoteStatus.PROPOSED,
+        )
+        .values(status=QuoteStatus.ACCEPTED)
+    )
+    if quote_res.rowcount != 1:
+        current_order_price = db.scalar(
+            select(Order.agreed_price).where(Order.id == order.id)
+        )
+        if current_order_price is not None:
             raise HTTPException(
                 status.HTTP_409_CONFLICT,
                 PRICE_ALREADY_CONFIRMED_OR_CHANGED,
             )
         raise HTTPException(
             status.HTTP_409_CONFLICT,
-            "Faqat taklif qilingan narxni tasdiqlash mumkin",
+            "Faqat taklif qilingan (faol) narxni tasdiqlash mumkin",
         )
 
+    # 2. Buyurtmaning kelishilgan narxini atomik o'rnatish
     result = db.execute(
         update(Order)
         .where(
@@ -164,6 +178,7 @@ def accept_quote(
             PRICE_ALREADY_CONFIRMED_OR_CHANGED,
         )
 
+    # 3. Boshqa barcha takliflarni rad etish
     db.execute(
         update(Quote)
         .where(
@@ -172,11 +187,6 @@ def accept_quote(
             Quote.status == QuoteStatus.PROPOSED,
         )
         .values(status=QuoteStatus.REJECTED)
-    )
-    db.execute(
-        update(Quote)
-        .where(Quote.id == quote.id)
-        .values(status=QuoteStatus.ACCEPTED)
     )
 
     db.expire_all()
@@ -235,6 +245,7 @@ def apply_fixed_price(db: Session, order: Order) -> Order:
             update(Order)
             .where(
                 Order.id == order.id,
+                Order.status == OrderStatus.ASSIGNED,
                 Order.agreed_price.is_(None),
             )
             .values(agreed_price=service.base_price)
@@ -252,7 +263,7 @@ def start_order(db: Session, order: Order, actor: User) -> Order:
     """
     from_s = OrderStatus(order.status)
     if not order_flow.can_transition(from_s, OrderStatus.IN_PROGRESS):
-        order_flow.transition(db, order, OrderStatus.IN_PROGRESS, actor)
+        raise HTTPException(status.HTTP_409_CONFLICT, order_flow.ILLEGAL_TRANSITION)
     order_flow._check_actor(order, from_s, OrderStatus.IN_PROGRESS, actor)
 
     if order.agreed_price is None or order.agreed_price <= 0:
@@ -269,7 +280,7 @@ def complete_order(db: Session, order: Order, actor: User) -> Order:
     """
     from_s = OrderStatus(order.status)
     if not order_flow.can_transition(from_s, OrderStatus.COMPLETED):
-        order_flow.transition(db, order, OrderStatus.COMPLETED, actor)
+        raise HTTPException(status.HTTP_409_CONFLICT, order_flow.ILLEGAL_TRANSITION)
     order_flow._check_actor(order, from_s, OrderStatus.COMPLETED, actor)
 
     if order.agreed_price is None or order.agreed_price <= 0:

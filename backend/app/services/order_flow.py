@@ -115,7 +115,20 @@ def transition(
         raise HTTPException(status.HTTP_409_CONFLICT, ILLEGAL_TRANSITION)
     _check_actor(order, from_s, to_s, actor)
 
-    order.status = to_s
+    res = db.execute(
+        update(Order)
+        .where(
+            Order.id == order.id,
+            Order.status == from_s,
+        )
+        .values(status=to_s)
+    )
+    if res.rowcount != 1:
+        raise HTTPException(status.HTTP_409_CONFLICT, ILLEGAL_TRANSITION)
+
+    db.expire(order, ["status"])
+    db.refresh(order, ["status"])
+
     entry = OrderStatusHistory(
         order=order, from_status=from_s, to_status=to_s, changed_by=actor.id
     )

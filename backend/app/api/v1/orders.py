@@ -98,7 +98,6 @@ def _order_out(order: Order, db: Session, note: str | None = None) -> OrderOut:
         selection_mode=order.selection_mode,
         agreed_price=order.agreed_price,
         commission_rate=order.commission_rate,
-        commission_amount=order.commission_amount,
         created_at=order.created_at,
         history=order.history,
         offers=offers,
@@ -511,8 +510,12 @@ def accept_quote(
     if quote is None or quote.order_id != order.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Narx taklifi topilmadi")
 
-    order = pricing.accept_quote(db, order, quote, user)
-    db.commit()
+    try:
+        order = pricing.accept_quote(db, order, quote, user)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     return {
         "detail": "Narx taklifi qabul qilindi",
         "order_id": order.id,

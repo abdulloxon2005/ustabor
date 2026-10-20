@@ -532,3 +532,100 @@ def test_earnings_isolation_between_two_masters(client, db, signup, make_categor
     assert e2["net_total"] == 270_000
     assert len(e2["orders"]) == 1
     assert e2["orders"][0]["id"] == o2
+
+
+def _has_key_recursive(obj, target_key: str) -> bool:
+    """JSON strukturasi ichida berilgan kalit mavjudligini rekursiv tekshiradi."""
+    if isinstance(obj, dict):
+        if target_key in obj:
+            return True
+        return any(_has_key_recursive(v, target_key) for v in obj.values())
+    if isinstance(obj, list):
+        return any(_has_key_recursive(item, target_key) for item in obj)
+    return False
+
+
+def test_customer_responses_never_contain_commission_amount_recursively_and_master_endpoints_correct(
+    client, db, signup, make_category
+):
+    """7. API level: POST /orders, POST /orders/{id}/cancel, GET /orders, GET /orders/{id}
+    mijoz uchun rekursiv tekshirilganda 'commission_amount' kalitiga ega bo'lmaydi;
+    ustaning complete javobi va /masters/me/earnings uni saqlaydi va sonlar to'g'ri (200000 -> 20000 -> 180000).
+    """
+    cat = make_category("Santexnik", "santexnik")
+    h_c, _ = signup("customer", "+998901000099", "Mijoz Test")
+    h_m, u_m = signup("master", "+998902000099", "Usta Test")
+    mp = _create_master(db, u_m["id"], cat.id, pricing_type=PricingType.FIXED, base_price=200_000)
+
+    # 1. POST /orders
+    r_create = client.post(
+        "/api/v1/orders",
+        json={
+            "category_id": cat.id,
+            "description": "Kran va truba ta'miri",
+            "city": "Toshkent",
+            "district": "Chilonzor",
+            "address": "Navoiy ko'chasi 5",
+            "selection_mode": "manual",
+        },
+        headers=h_c,
+    )
+    assert r_create.status_code == 201
+    o1_json = r_create.json()
+    assert not _has_key_recursive(o1_json, "commission_amount")
+    oid = o1_json["id"]
+
+    # 2. GET /orders
+    r_list = client.get("/api/v1/orders", headers=h_c)
+    assert r_list.status_code == 200
+    assert not _has_key_recursive(r_list.json(), "commission_amount")
+
+    # 3. GET /orders/{id} (assigned holatida)
+    client.post(f"/api/v1/orders/{oid}/select-master", json={"master_id": mp.id}, headers=h_c)
+    client.post(f"/api/v1/orders/{oid}/accept", headers=h_m)
+
+    r_get = client.get(f"/api/v1/orders/{oid}", headers=h_c)
+    assert r_get.status_code == 200
+    assert not _has_key_recursive(r_get.json(), "commission_amount")
+
+    # 4. POST /orders/{id2}/cancel
+    r_create2 = client.post(
+        "/api/v1/orders",
+        json={
+            "category_id": cat.id,
+            "description": "Bekor qilinadigan buyurtma",
+            "city": "Toshkent",
+            "district": "Chilonzor",
+            "address": "Navoiy ko'chasi 6",
+            "selection_mode": "manual",
+        },
+        headers=h_c,
+    )
+    oid2 = r_create2.json()["id"]
+    r_cancel = client.post(f"/api/v1/orders/{oid2}/cancel", headers=h_c)
+    assert r_cancel.status_code == 200
+    assert not _has_key_recursive(r_cancel.json(), "commission_amount")
+
+    # 5. Usta boshlaydi va yakunlaydi
+    client.post(f"/api/v1/orders/{oid}/start", headers=h_m)
+    r_comp = client.post(f"/api/v1/orders/{oid}/complete", headers=h_m)
+    assert r_comp.status_code == 200
+    comp_data = r_comp.json()
+    assert comp_data["price"] == 200_000
+    assert comp_data["commission_rate"] == 10
+    assert comp_data["commission_amount"] == 20_000
+    assert comp_data["net_amount"] == 180_000
+    assert comp_data["net"] == 180_000
+
+    # 6. /masters/me/earnings
+    r_earn = client.get("/api/v1/masters/me/earnings", headers=h_m)
+    assert r_earn.status_code == 200
+    earn_data = r_earn.json()
+    assert earn_data["completed_count"] == 1
+    assert earn_data["gross_total"] == 200_000
+    assert earn_data["commission_total"] == 20_000
+    assert earn_data["net_total"] == 180_000
+    assert len(earn_data["orders"]) == 1
+    assert earn_data["orders"][0]["agreed_price"] == 200_000
+    assert earn_data["orders"][0]["commission_amount"] == 20_000
+    assert earn_data["orders"][0]["net"] == 180_000

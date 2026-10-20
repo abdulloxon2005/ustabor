@@ -564,3 +564,278 @@ class TestStartAndCompleteOrder:
         assert order.agreed_price is None
         assert order.commission_amount is None
         assert pricing is not None
+
+
+# ====== 6. Review fixes testlari ======
+
+
+class TestReviewFixes:
+    def test_stale_complete_concurrent_returns_409_and_single_payment(self, db):
+        """1. STALE complete: ikki sessiya bir xil in_progress buyurtmani oladi;
+        sessiya A complete qilib commit qiladi; sessiya B complete qilmoqchi bo'ladi -> 409,
+        aniq bitta Payment, komissiya o'zgarmagan.
+        """
+        cat = _category(db)
+        cust = _user(db, "+998900000021", Role.CUSTOMER)
+        u_m = _user(db, "+998900000022", Role.MASTER)
+        mp = _master(db, u_m)
+        order = _order(
+            db,
+            cust,
+            cat,
+            master=mp,
+            status=OrderStatus.IN_PROGRESS,
+            agreed_price=200_000,
+            commission_rate=10,
+        )
+        db.commit()
+
+        order_id = order.id
+        master_user_id = u_m.id
+
+        session_b = SessionLocal()
+        try:
+            order_b = session_b.get(models.Order, order_id)
+            user_b = session_b.get(models.User, master_user_id)
+            assert order_b.status == OrderStatus.IN_PROGRESS
+
+            # Sessiya A ishni yakunlaydi va commit qiladi
+            complete_order(db, order, u_m)
+            db.commit()
+
+            assert order.status == OrderStatus.COMPLETED
+            assert order.commission_amount == 20_000
+
+            # Sessiya B stale order_b bilan yakunlamoqchi bo'ladi -> 409
+            with pytest.raises(HTTPException) as exc:
+                complete_order(session_b, order_b, user_b)
+            assert exc.value.status_code == 409
+            session_b.rollback()
+        finally:
+            session_b.close()
+
+        # Bazada aynan bitta to'lov va o'zgarmagan komissiya
+        db.expire_all()
+        fresh = db.get(models.Order, order_id)
+        assert fresh.status == OrderStatus.COMPLETED
+        assert fresh.commission_amount == 20_000
+        payments = db.scalars(
+            select(models.Payment).where(models.Payment.order_id == order_id)
+        ).all()
+        assert len(payments) == 1
+        assert payments[0].amount == 200_000
+
+    def test_cancel_vs_complete_stale_cancel_rejected(self, db):
+        """2. Cancel vs complete: assigned buyurtma; usta sessiya A da boshlaydi va yakunlaydi (commit);
+        mijozning stale sessiyasi B bekor qilmoqchi bo'ladi -> 409 va buyurtma to'lovi bilan completed qoladi.
+        """
+        from app.services.order_flow import transition
+
+        cat = _category(db)
+        cust = _user(db, "+998900000023", Role.CUSTOMER)
+        u_m = _user(db, "+998900000024", Role.MASTER)
+        mp = _master(db, u_m)
+        order = _order(
+            db,
+            cust,
+            cat,
+            master=mp,
+            status=OrderStatus.ASSIGNED,
+            agreed_price=150_000,
+            commission_rate=10,
+        )
+        db.commit()
+
+        order_id = order.id
+        cust_id = cust.id
+
+        session_b = SessionLocal()
+        try:
+            # Stale mijoz sessiyasi buyurtma ASSIGNED paytida yuklaydi
+            order_b = session_b.get(models.Order, order_id)
+            cust_b = session_b.get(models.User, cust_id)
+            assert order_b.status == OrderStatus.ASSIGNED
+
+            # Usta sessiya A da boshlaydi va yakunlaydi
+            start_order(db, order, u_m)
+            complete_order(db, order, u_m)
+            db.commit()
+
+            assert order.status == OrderStatus.COMPLETED
+
+            # Mijoz stale sessiya B da bekor qilmoqchi bo'ladi -> 409
+            with pytest.raises(HTTPException) as exc:
+                transition(session_b, order_b, OrderStatus.CANCELLED, cust_b)
+            assert exc.value.status_code == 409
+            session_b.rollback()
+        finally:
+            session_b.close()
+
+        # Buyurtma completed holatida to'lovi bilan qolganini tekshirish
+        db.expire_all()
+        fresh = db.get(models.Order, order_id)
+        assert fresh.status == OrderStatus.COMPLETED
+        assert fresh.commission_amount == 15_000
+        payments = db.scalars(
+            select(models.Payment).where(models.Payment.order_id == order_id)
+        ).all()
+        assert len(payments) == 1
+
+    def test_cancel_vs_start_stale_start_rejected(self, db):
+        """3. Cancel vs start: mijoz sessiya A da bekor qiladi (commit);
+        ustaning stale sessiyasi B boshlamoqchi bo'ladi -> 409, buyurtma bekor qilingancha qoladi.
+        """
+        from app.services.order_flow import transition
+
+        cat = _category(db)
+        cust = _user(db, "+998900000025", Role.CUSTOMER)
+        u_m = _user(db, "+998900000026", Role.MASTER)
+        mp = _master(db, u_m)
+        order = _order(
+            db,
+            cust,
+            cat,
+            master=mp,
+            status=OrderStatus.ASSIGNED,
+            agreed_price=100_000,
+            commission_rate=10,
+        )
+        db.commit()
+
+        order_id = order.id
+        master_user_id = u_m.id
+
+        session_b = SessionLocal()
+        try:
+            order_b = session_b.get(models.Order, order_id)
+            master_b = session_b.get(models.User, master_user_id)
+            assert order_b.status == OrderStatus.ASSIGNED
+
+            # Mijoz sessiya A da bekor qiladi
+            transition(db, order, OrderStatus.CANCELLED, cust)
+            db.commit()
+
+            assert order.status == OrderStatus.CANCELLED
+
+            # Usta stale sessiya B da boshlamoqchi bo'ladi -> 409
+            with pytest.raises(HTTPException) as exc:
+                start_order(session_b, order_b, master_b)
+            assert exc.value.status_code == 409
+            session_b.rollback()
+        finally:
+            session_b.close()
+
+        # Buyurtma bekor qilingan holatda qolganini tekshirish
+        db.expire_all()
+        fresh = db.get(models.Order, order_id)
+        assert fresh.status == OrderStatus.CANCELLED
+
+    def test_old_rejected_quote_accept_raises_409_and_accepting_active_works(self, db):
+        """4. Old/rejected quote: usta 1-taklif, so'ng 2-taklif beradi (1-taklif rejected bo'ladi);
+        mijoz 1-taklifni qabul qilmoqchi bo'ladi -> 409; 2-taklifni qabul qilish ishlaydi;
+        agreed_price 2-taklif narxiga teng bo'ladi.
+        """
+        cat = _category(db)
+        cust = _user(db, "+998900000027", Role.CUSTOMER)
+        u_m = _user(db, "+998900000028", Role.MASTER)
+        mp = _master(db, u_m)
+        order = _order(db, cust, cat, master=mp, status=OrderStatus.ASSIGNED)
+
+        q1 = propose_quote(db, order, mp, 120_000, "1-taklif")
+        q2 = propose_quote(db, order, mp, 180_000, "2-taklif")
+        db.commit()
+
+        db.refresh(q1)
+        db.refresh(q2)
+        assert q1.status == QuoteStatus.REJECTED
+        assert q2.status == QuoteStatus.PROPOSED
+
+        # Mijoz eski rad etilgan taklifni qabul qilmoqchi bo'ladi -> 409
+        with pytest.raises(HTTPException) as exc:
+            accept_quote(db, order, q1, cust)
+        assert exc.value.status_code == 409
+        assert "taklif qilingan" in exc.value.detail.lower()
+
+        # 2-faol taklifni qabul qilish muvaffaqiyatli ishlaydi
+        accept_quote(db, order, q2, cust)
+        db.commit()
+
+        db.refresh(order)
+        db.refresh(q2)
+        assert order.agreed_price == 180_000
+        assert q2.status == QuoteStatus.ACCEPTED
+
+    def test_failed_order_update_does_not_leave_accepted_quote_after_rollback(self, db):
+        """5. Failed order update must not leave an accepted quote behind:
+        buyurtmada agreed_price allaqachon mavjud bo'lgan holat simulyatsiya qilinadi;
+        proposed kotirovka uchun accept_quote chaqiriladi -> 409;
+        rollback/yangi sessiyadan keyin bu kotirovka hali ham 'proposed' holatida qoladi.
+        """
+        cat = _category(db)
+        cust = _user(db, "+998900000029", Role.CUSTOMER)
+        u_m = _user(db, "+998900000030", Role.MASTER)
+        mp = _master(db, u_m)
+        order = _order(
+            db,
+            cust,
+            cat,
+            master=mp,
+            status=OrderStatus.ASSIGNED,
+            agreed_price=100_000,
+        )
+        q = models.Quote(
+            order_id=order.id,
+            master_id=mp.id,
+            price=150_000,
+            status=QuoteStatus.PROPOSED,
+        )
+        db.add(q)
+        db.commit()
+
+        # accept_quote chaqiriladi -> buyurtmada narx borligi uchun 409
+        with pytest.raises(HTTPException) as exc:
+            accept_quote(db, order, q, cust)
+        assert exc.value.status_code == 409
+        # Chaqiruvchi xatolikda rollback qiladi
+        db.rollback()
+
+        # Rollback dan so'ng kotirovka PROPOSED bo'lib qolishi shart
+        db.expire_all()
+        fresh_q = db.get(models.Quote, q.id)
+        assert fresh_q.status == QuoteStatus.PROPOSED
+
+    def test_apply_fixed_price_on_cancelled_and_completed_order_does_nothing(self, db):
+        """6. apply_fixed_price bekor qilingan yoki yakunlangan buyurtmada hech narsa qilmaydi
+        (agreed_price null yoki o'zgarmay qoladi).
+        """
+        cat = _category(db)
+        cust = _user(db, "+998900000031", Role.CUSTOMER)
+        u_m = _user(db, "+998900000032", Role.MASTER)
+        mp = _master(db, u_m)
+        db.add(
+            models.MasterService(
+                master_id=mp.id,
+                category_id=cat.id,
+                pricing_type=PricingType.FIXED,
+                base_price=250_000,
+            )
+        )
+        db.flush()
+
+        # Bekor qilingan buyurtma
+        cancelled_order = _order(
+            db, cust, cat, master=mp, status=OrderStatus.CANCELLED, agreed_price=None
+        )
+        apply_fixed_price(db, cancelled_order)
+        db.commit()
+        db.refresh(cancelled_order)
+        assert cancelled_order.agreed_price is None
+
+        # Yakunlangan buyurtma (oldindan narxi bor)
+        completed_order = _order(
+            db, cust, cat, master=mp, status=OrderStatus.COMPLETED, agreed_price=200_000
+        )
+        apply_fixed_price(db, completed_order)
+        db.commit()
+        db.refresh(completed_order)
+        assert completed_order.agreed_price == 200_000

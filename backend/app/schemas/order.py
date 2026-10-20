@@ -91,7 +91,6 @@ class OrderOut(BaseModel):
     selection_mode: SelectionMode
     agreed_price: int | None
     commission_rate: int
-    commission_amount: int | None
     created_at: datetime
     history: list[HistoryOut]
     offers: list[OfferOut] = []
