@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#2563eb" />
+  <title>Ustalar - UstaBor</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <header class="app-header">
+    <a class="brand" href="index.html">UstaBor</a>
+    <a class="btn btn-outline" href="index.html">Orqaga</a>
+  </header>
+
+  <main class="container">
+    <h1 id="title">Ustalar</h1>
+
+    <form id="filters" class="filters" novalidate>
+      <div>
+        <label for="city">Shahar</label>
+        <input id="city" name="city" type="text" autocomplete="off" placeholder="Toshkent" />
+      </div>
+      <div>
+        <label for="district">Tuman</label>
+        <input id="district" name="district" type="text" autocomplete="off" placeholder="Chilonzor" />
+      </div>
+      <button class="btn" type="submit">Qidirish</button>
+    </form>
+
+    <p id="state" class="muted" aria-live="polite"></p>
+    <div id="list"></div>
+  </main>
+
+  <nav class="bottom-nav">
+    <a class="active" href="index.html"><span class="icon">🏠</span>Asosiy</a>
+    <a href="#"><span class="icon">📋</span>Buyurtmalar</a>
+    <a href="login.html"><span class="icon">👤</span>Profil</a>
+  </nav>
+
+  <script src="js/api.js"></script>
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const rawCat = params.get("category_id");
+    const categoryId = rawCat && /^\d+$/.test(rawCat) ? rawCat : null;
+
+    const form = document.getElementById("filters");
+    const stateEl = document.getElementById("state");
+    const listEl = document.getElementById("list");
+    form.city.value = params.get("city") || "";
+    form.district.value = params.get("district") || "";
+
+    // 150000 -> "150 000 so'm"
+    function formatPrice(n) {
+      return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, " ") + " so'm";
+    }
+
+    function setState(text, isError) {
+      stateEl.textContent = text;
+      stateEl.className = isError ? "err" : "muted";
+    }
+
+    function renderMaster(m) {
+      const card = document.createElement("div");
+      card.className = "card master-card";
+
+      const head = document.createElement("div");
+      head.className = "card-row";
+      const name = document.createElement("h3");
+      name.textContent = m.full_name;
+      const rating = document.createElement("span");
+      if (m.rating_count > 0) {
+        rating.className = "rating";
+        rating.textContent = "★ " + m.rating_avg.toFixed(1) + " (" + m.rating_count + ")";
+      } else {
+        rating.className = "badge";
+        rating.textContent = "Yangi usta";
+      }
+      head.append(name, rating);
+
+      const place = document.createElement("p");
+      place.className = "muted";
+      place.style.margin = "4px 0 0";
+      place.textContent = m.city + ", " + m.district;
+      card.append(head, place);
+
+      if (m.bio) {
+        const bio = document.createElement("p");
+        bio.style.margin = "8px 0 0";
+        bio.textContent = m.bio;
+        card.appendChild(bio);
+      }
+
+      // Tanlangan kategoriya xizmati birinchi, qolganlari keyin
+      const services = m.services.slice().sort((a, b) =>
+        (String(b.category_id) === categoryId) - (String(a.category_id) === categoryId));
+      if (services.length) {
+        const ul = document.createElement("ul");
+        services.forEach((s) => {
+          const li = document.createElement("li");
+          const n = document.createElement("span");
+          n.textContent = s.category_name;
+          const p = document.createElement("span");
+          p.className = "price";
+          p.textContent = s.pricing_type === "fixed" && s.base_price != null
+            ? formatPrice(s.base_price) : "Narx kelishiladi";
+          li.append(n, p);
+          ul.appendChild(li);
+        });
+        card.appendChild(ul);
+      }
+      return card;
+    }
+
+    async function load() {
+      const q = new URLSearchParams();
+      if (categoryId) q.set("category_id", categoryId);
+      const city = form.city.value.trim();
+      const district = form.district.value.trim();
+      if (city) q.set("city", city);
+      if (district) q.set("district", district);
+
+      listEl.replaceChildren();
+      setState("Yuklanmoqda...", false);
+      try {
+        const masters = await apiFetch("/masters" + (q.toString() ? "?" + q : ""));
+        if (!masters.length) {
+          setState("", false);
+          const empty = document.createElement("div");
+          empty.className = "card empty-state";
+          empty.textContent = "Hozircha usta topilmadi";
+          listEl.appendChild(empty);
+          return;
+        }
+        setState("Topildi: " + masters.length + " ta usta", false);
+        masters.forEach((m) => listEl.appendChild(renderMaster(m)));
+      } catch (e) {
+        setState("Xatolik: " + e.message, true);
+      }
+    }
+
+    // Kategoriya nomini sarlavhaga qo'yamiz
+    if (categoryId) {
+      apiFetch("/categories").then((list) => {
+        const c = list.find((x) => String(x.id) === categoryId);
+        if (c) document.getElementById("title").textContent = c.name;
+      }).catch(() => {});
+    }
+
+    form.addEventListener("submit", (e) => { e.preventDefault(); load(); });
+    load();
+  </script>
+</body>
+</html>

@@ -260,3 +260,29 @@ body.auth-page { padding-bottom: 0; }
   color: #fff;
 }
 .segmented input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+
+/* ===== Kategoriya va usta kartochkalari ===== */
+.category-card {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 80px;
+  margin: 0;
+  text-align: center;
+  font-weight: 600;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.category-card:hover { border-color: var(--primary); }
+
+.filters { display: grid; gap: 0 12px; grid-template-columns: 1fr; }
+@media (min-width: 600px) { .filters { grid-template-columns: 1fr 1fr auto; align-items: end; } }
+.filters .btn { margin-top: 12px; }
+
+.master-card h3 { margin: 0; font-size: 1.05rem; overflow-wrap: anywhere; }
+.master-card ul { list-style: none; margin: 10px 0 0; padding: 0; }
+.master-card li { display: flex; justify-content: space-between; gap: 8px; padding: 4px 0; }
+.master-card .price { font-weight: 600; white-space: nowrap; }
+.rating { color: #b45309; font-weight: 600; white-space: nowrap; }
+.empty-state { text-align: center; padding: 32px 16px; }

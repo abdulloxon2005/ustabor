@@ -17,18 +17,14 @@
     <section class="hero">
       <h1>Uyga usta chaqiring</h1>
       <p class="muted">Xizmat tanlang, buyurtma bering, usta toping.</p>
-      <a class="btn btn-accent" href="#">Buyurtma berish</a>
+      <a class="btn btn-accent" href="#categories">Buyurtma berish</a>
     </section>
 
     <p id="status" class="muted">Server tekshirilmoqda...</p>
 
     <h2>Xizmatlar</h2>
-    <div class="grid" id="categories">
-      <div class="card">Santexnik</div>
-      <div class="card">Elektrik</div>
-      <div class="card">Konditsioner</div>
-      <div class="card">Maishiy texnika</div>
-    </div>
+    <p id="cat-state" class="muted">Yuklanmoqda...</p>
+    <div class="grid" id="categories"></div>
   </main>
 
   <nav class="bottom-nav">
@@ -48,6 +44,29 @@
       .catch((e) => {
         el.textContent = "Serverga ulanib bo'lmadi: " + e.message;
         el.className = "err";
+      });
+
+    // Kategoriyalar
+    const catState = document.getElementById("cat-state");
+    const catGrid = document.getElementById("categories");
+    apiFetch("/categories")
+      .then((list) => {
+        if (!list.length) {
+          catState.textContent = "Hozircha xizmatlar yo'q";
+          return;
+        }
+        catState.hidden = true;
+        list.forEach((c) => {
+          const a = document.createElement("a");
+          a.className = "card category-card";
+          a.href = "masters.html?category_id=" + encodeURIComponent(c.id);
+          a.textContent = c.name;
+          catGrid.appendChild(a);
+        });
+      })
+      .catch((e) => {
+        catState.textContent = "Xizmatlarni yuklab bo'lmadi: " + e.message;
+        catState.className = "err";
       });
   </script>
 </body>
