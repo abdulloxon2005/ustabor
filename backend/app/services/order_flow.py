@@ -70,7 +70,10 @@ def _master_profile_id(actor: User) -> int | None:
     return profile.id if profile is not None else None
 
 
-def _check_actor(order: Order, from_s: OrderStatus, to_s: OrderStatus, actor: User) -> None:
+def _check_actor(order: Order, from_s: OrderStatus, to_s: OrderStatus, actor: User | None) -> None:
+    if actor is None:
+        raise _forbidden()
+
     pair = (from_s, to_s)
 
     if actor.role == Role.CUSTOMER:
@@ -94,7 +97,9 @@ def _check_actor(order: Order, from_s: OrderStatus, to_s: OrderStatus, actor: Us
     raise _forbidden()
 
 
-def transition(db: Session, order: Order, to_status: OrderStatus | str, actor: User) -> OrderStatusHistory:
+def transition(
+    db: Session, order: Order, to_status: OrderStatus | str, actor: User | None
+) -> OrderStatusHistory:
     """Holatni tekshirib o'zgartiradi va tarixga yozadi. COMMIT QILMAYDI.
 
     409: jadvalda bunday o'tish yo'q (yakuniy holat, bir xil holat ham shu yerda).
@@ -156,6 +161,8 @@ def assign_master(
     Actor qoidalari: master o'zi yoki admin.
     """
     # ----- Actor tekshiruvi -----
+    if actor is None:
+        raise _forbidden()
     if actor.role == Role.MASTER:
         pid = _master_profile_id(actor)
         if pid is None or pid != master_profile_id:

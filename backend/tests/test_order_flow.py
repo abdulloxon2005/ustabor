@@ -243,8 +243,20 @@ def test_master_only_on_own_order(db, mk_order, master, mk_user):
     other_master = mk_user(Role.MASTER)
     order = mk_order(S.ASSIGNED, master=master)
     expect(403, transition, db, order, S.IN_PROGRESS, other_master)
+    order_ip = mk_order(S.IN_PROGRESS, master=master)
+    expect(403, transition, db, order_ip, S.COMPLETED, other_master)
     # Biriktirilmagan buyurtmani qabul qilib bo'lmaydi
     expect(403, transition, db, mk_order(S.SEARCHING), S.ASSIGNED, master)
+
+
+@pytest.mark.parametrize("from_s,to_s", [
+    (S.ASSIGNED, S.IN_PROGRESS),
+    (S.IN_PROGRESS, S.COMPLETED),
+    (S.SEARCHING, S.CANCELLED),
+])
+def test_anonymous_actor_forbidden(db, mk_order, master, from_s, to_s):
+    order = mk_order(from_s, master=master)
+    expect(403, transition, db, order, to_s, None)
 
 
 @pytest.mark.parametrize("from_s", [S.SEARCHING, S.ASSIGNED, S.IN_PROGRESS])

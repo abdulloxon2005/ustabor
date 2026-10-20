@@ -27,6 +27,8 @@ class Settings(BaseSettings):
 
     # Standart komissiya foizi (buyurtma yaratilganda orderga nusxalanadi)
     COMMISSION_RATE: int = 10
+    # Narx taklifi uchun maksimal chegara (so'mda)
+    QUOTE_MAX_PRICE: int = 100_000_000
 
      # Faqat seed skript uchun (productionda .env orqali o'zgartiring)
     SEED_ADMIN_PHONE: str = "+998900000000"
