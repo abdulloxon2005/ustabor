@@ -32,6 +32,22 @@ class Settings(BaseSettings):
     SEED_ADMIN_PHONE: str = "+998900000000"
     SEED_ADMIN_PASSWORD: str = "admin12345"
 
+    # ===== Takliflar va moslashtirish (matching) =====
+    # Taklif amal qilish muddati (daqiqa)
+    OFFER_TTL_MINUTES: int = 30
+
+    # Bayes o'rtacha reytingi uchun prior: m (pseudo-sharh soni)
+    MATCH_RATING_PRIOR_COUNT: int = 5
+    # Sharhlar bazasida hech narsa yo'q bo'lganda global o'rtacha sifatida ishlatiladigan qiymat
+    MATCH_DEFAULT_GLOBAL_AVG: float = 4.0
+    # "Yangi usta" chegarasi: rating_count < shu qiymat = yangi
+    MATCH_NEW_MASTER_THRESHOLD: int = 3
+
+    # Scoring vaznlari (har biri 0..1 oralig'ida, yig'indisi 1 bo'lishi shart emas)
+    MATCH_W_RATING: float = 0.6    # Bayes reyting
+    MATCH_W_DISTRICT: float = 0.25  # Tuman mos kelishi
+    MATCH_W_NEW_BONUS: float = 0.15 # Yangi usta bonusi
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]

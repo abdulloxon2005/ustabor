@@ -10,10 +10,11 @@ Ikki bosqichli tekshiruv:
 """
 
 from fastapi import HTTPException, status
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
-from app.models import Order, OrderStatusHistory, User
-from app.models.enums import OrderStatus, Role
+from app.models import Order, OrderOffer, OrderStatusHistory, User
+from app.models.enums import OfferStatus, OrderStatus, Role
 
 S = OrderStatus
 
@@ -125,3 +126,91 @@ def create_order_history(db: Session, order: Order, actor: User) -> OrderStatusH
     )
     db.add(entry)
     return entry
+
+
+# ---------- Atomik usta biriktirish ----------
+
+ALREADY_ASSIGNED = "Buyurtma allaqachon boshqa ustaga biriktirilgan yoki yopilgan"
+
+
+def assign_master(
+    db: Session,
+    order_id: int,
+    master_profile_id: int,
+    actor: User,
+) -> Order:
+    """Ustani buyurtmaga atomik tarzda biriktiradi. COMMIT QILMAYDI.
+
+    Bitta conditional UPDATE orqali ish bajariladi:
+      UPDATE orders SET status='assigned', master_id=:mid
+      WHERE id=:oid AND status='searching' AND master_id IS NULL
+
+    rowcount == 0 -> 409 (boshqa tranzaksiya allaqachon biriktirgan yoki
+    holat o'zgargan).
+
+    Muvaffaqiyatli UPDATE dan keyin:
+      1. OrderStatusHistory yozuvi (searching -> assigned)
+      2. G'olib taklif (order_id, master_id, status=pending) -> accepted
+      3. Boshqa pending takliflar -> rejected
+
+    Actor qoidalari: master o'zi yoki admin.
+    """
+    # ----- Actor tekshiruvi -----
+    if actor.role == Role.MASTER:
+        pid = _master_profile_id(actor)
+        if pid is None or pid != master_profile_id:
+            raise _forbidden()
+    elif actor.role != Role.ADMIN:
+        raise _forbidden()
+
+    # ----- Atomik UPDATE -----
+    result = db.execute(
+        update(Order)
+        .where(
+            Order.id == order_id,
+            Order.status == OrderStatus.SEARCHING,
+            Order.master_id.is_(None),
+        )
+        .values(status=OrderStatus.ASSIGNED, master_id=master_profile_id)
+    )
+
+    if result.rowcount == 0:
+        raise HTTPException(status.HTTP_409_CONFLICT, ALREADY_ASSIGNED)
+
+    # ----- Tarixga yozish -----
+    history = OrderStatusHistory(
+        order_id=order_id,
+        from_status=OrderStatus.SEARCHING,
+        to_status=OrderStatus.ASSIGNED,
+        changed_by=actor.id,
+    )
+    db.add(history)
+
+    # ----- Takliflar holatini yangilash -----
+    # G'olib taklif -> accepted
+    db.execute(
+        update(OrderOffer)
+        .where(
+            OrderOffer.order_id == order_id,
+            OrderOffer.master_id == master_profile_id,
+            OrderOffer.status == OfferStatus.PENDING,
+        )
+        .values(status=OfferStatus.ACCEPTED)
+    )
+    # Qolgan pending takliflar -> rejected
+    db.execute(
+        update(OrderOffer)
+        .where(
+            OrderOffer.order_id == order_id,
+            OrderOffer.master_id != master_profile_id,
+            OrderOffer.status == OfferStatus.PENDING,
+        )
+        .values(status=OfferStatus.REJECTED)
+    )
+
+    # ----- ORM ob'ektni yangilash (stale ob'ektdan qochish) -----
+    # Sessiya keshidagi order hali eski qiymatlarni saqlaydi,
+    # expire qilib qayta o'qiymiz.
+    db.expire_all()
+    order = db.get(Order, order_id)
+    return order
