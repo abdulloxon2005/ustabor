@@ -49,8 +49,8 @@
     const STATUS_LABEL = {
       searching: "Qidirilmoqda",
       assigned: "Usta tayinlangan",
-      in_progress: "Bajarilmoqda",
-      completed: "Yakunlangan",
+      in_progress: "Usta ishlamoqda",
+      completed: "Yakunlandi",
       cancelled: "Bekor qilingan",
     };
 
@@ -93,7 +93,7 @@
         const price = document.createElement("p");
         price.style.margin = "6px 0 0";
         price.style.fontWeight = "600";
-        price.textContent = String(o.agreed_price).replace(/\B(?=(\d{3})+(?!\d))/g, " ") + " so'm";
+        price.textContent = "Kelishilgan narx: " + formatSom(o.agreed_price);
         card.appendChild(price);
       }
 
@@ -111,6 +111,98 @@
         offerStateEl.textContent = "Usta biriktirildi: " + (o.master_name || "Usta");
         offerStateEl.style.color = "var(--primary)";
         card.appendChild(offerStateEl);
+
+        // Usta narx taklifi bo'lsa (agreed_price hali tasdiqlanmagan holda)
+        if (o.status === "assigned" && o.agreed_price == null) {
+          const quotes = o.quotes || [];
+          const proposedQuote = quotes.slice().reverse().find((q) => q.status === "proposed");
+          if (proposedQuote) {
+            const quoteBox = document.createElement("div");
+            quoteBox.style.background = "#eff6ff";
+            quoteBox.style.border = "1px solid #bfdbfe";
+            quoteBox.style.borderRadius = "10px";
+            quoteBox.style.padding = "10px 12px";
+            quoteBox.style.margin = "10px 0";
+
+            const title = document.createElement("div");
+            title.style.fontWeight = "600";
+            title.style.color = "#1e40af";
+            title.textContent = "Usta narx taklifi:";
+
+            const pPrice = document.createElement("div");
+            pPrice.style.fontSize = "1.1rem";
+            pPrice.style.fontWeight = "700";
+            pPrice.style.margin = "4px 0";
+            pPrice.textContent = formatSom(proposedQuote.price);
+
+            quoteBox.append(title, pPrice);
+
+            if (proposedQuote.note) {
+              const pNote = document.createElement("div");
+              pNote.className = "muted";
+              pNote.style.fontSize = "0.85rem";
+              pNote.textContent = "Izoh: " + proposedQuote.note;
+              quoteBox.appendChild(pNote);
+            }
+
+            const btnRow = document.createElement("div");
+            btnRow.style.display = "flex";
+            btnRow.style.gap = "8px";
+            btnRow.style.marginTop = "8px";
+
+            const acceptBtn = document.createElement("button");
+            acceptBtn.className = "btn btn-accent";
+            acceptBtn.style.flex = "1";
+            acceptBtn.style.minHeight = "40px";
+            acceptBtn.textContent = "Tasdiqlash";
+
+            const rejectBtn = document.createElement("button");
+            rejectBtn.className = "btn btn-outline";
+            rejectBtn.style.flex = "1";
+            rejectBtn.style.minHeight = "40px";
+            rejectBtn.textContent = "Rad etish";
+
+            acceptBtn.addEventListener("click", async () => {
+              if (!confirm("Narx taklifini tasdiqlaysizmi: " + formatSom(proposedQuote.price) + "?")) return;
+              acceptBtn.disabled = true;
+              rejectBtn.disabled = true;
+              acceptBtn.textContent = "Tasdiqlanmoqda...";
+              try {
+                await apiFetch("/orders/" + o.id + "/quotes/" + proposedQuote.id + "/accept", {
+                  method: "POST",
+                });
+                load();
+              } catch (err) {
+                alert(err.message);
+                acceptBtn.disabled = false;
+                rejectBtn.disabled = false;
+                acceptBtn.textContent = "Tasdiqlash";
+              }
+            });
+
+            rejectBtn.addEventListener("click", async () => {
+              if (!confirm("Narx taklifini rad etishni xohlaysizmi?")) return;
+              acceptBtn.disabled = true;
+              rejectBtn.disabled = true;
+              rejectBtn.textContent = "Rad etilmoqda...";
+              try {
+                await apiFetch("/orders/" + o.id + "/quotes/" + proposedQuote.id + "/reject", {
+                  method: "POST",
+                });
+                load();
+              } catch (err) {
+                alert(err.message);
+                acceptBtn.disabled = false;
+                rejectBtn.disabled = false;
+                rejectBtn.textContent = "Rad etish";
+              }
+            });
+
+            btnRow.append(acceptBtn, rejectBtn);
+            quoteBox.appendChild(btnRow);
+            card.appendChild(quoteBox);
+          }
+        }
       } else if (o.status === "searching") {
         if (hasPending) {
           offerStateEl.textContent = "Usta javobi kutilmoqda";

@@ -95,6 +95,12 @@ function formatError(data) {
   return "Xatolik yuz berdi";
 }
 
+function formatSom(n) {
+  if (n === null || n === undefined || isNaN(n)) return "";
+  const parts = String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+  return `${parts} so'm`;
+}
+
 // ===== So'rovlar =====
 async function apiFetch(path, options = {}) {
   const { headers, ...rest } = options;

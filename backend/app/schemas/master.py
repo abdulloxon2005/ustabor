@@ -12,6 +12,7 @@ from pydantic import (
 )
 
 from app.models.enums import OrderStatus, PricingType
+from app.schemas.quote import QuoteOut
 
 MAX_PRICE = 1_000_000_000  # 1 mlrd so'm: aqlga sig'adigan yuqori chegara
 
@@ -158,6 +159,8 @@ class MasterActiveOrderItem(BaseModel):
     customer_full_name: str = ""
     status: OrderStatus
     agreed_price: int | None
+    latest_quote: QuoteOut | None = None
+    latest_proposed_quote: QuoteOut | None = None
     created_at: datetime
 
 
@@ -165,4 +168,22 @@ class MasterOrdersOut(BaseModel):
     pending_offers: list[MasterOfferItem]
     offers: list[MasterOfferItem] = []
     active_orders: list[MasterActiveOrderItem]
+
+
+class MasterEarningOrderItem(BaseModel):
+    id: int
+    category: str
+    category_name: str = ""
+    agreed_price: int
+    commission_amount: int
+    net: int
+    net_amount: int
+
+
+class MasterEarningsOut(BaseModel):
+    completed_count: int
+    gross_total: int
+    commission_total: int
+    net_total: int
+    orders: list[MasterEarningOrderItem] = []
 

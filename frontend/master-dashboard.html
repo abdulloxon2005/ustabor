@@ -22,6 +22,33 @@
     <p id="state" class="muted" aria-live="polite">Yuklanmoqda...</p>
 
     <div id="content" style="display:none;">
+      <!-- Daromadlar hisobi kartochkasi -->
+      <div id="earnings-card" class="card" style="margin-bottom: 20px;">
+        <h3 style="margin: 0 0 12px; font-size: 1.1rem;">Daromadlar hisobi</h3>
+        <p id="earnings-loading" class="muted" style="margin: 0;">Yuklanmoqda...</p>
+        <div id="earnings-error" class="err" style="display: none; margin: 0;"></div>
+        <div id="earnings-content" style="display: none;">
+          <div class="grid" style="grid-template-columns: repeat(2, 1fr); gap: 10px;">
+            <div style="background: var(--bg); padding: 10px; border-radius: 10px;">
+              <span class="muted" style="font-size: 0.8rem; display: block;">Bajarilgan ishlar</span>
+              <strong id="earn-count" style="font-size: 1.15rem;">0</strong>
+            </div>
+            <div style="background: var(--bg); padding: 10px; border-radius: 10px;">
+              <span class="muted" style="font-size: 0.8rem; display: block;">Jami tushum</span>
+              <strong id="earn-gross" style="font-size: 1.15rem;">0 so'm</strong>
+            </div>
+            <div style="background: var(--bg); padding: 10px; border-radius: 10px;">
+              <span class="muted" style="font-size: 0.8rem; display: block;">Komissiya</span>
+              <strong id="earn-commission" style="font-size: 1.15rem; color: var(--err);">0 so'm</strong>
+            </div>
+            <div style="background: var(--bg); padding: 10px; border-radius: 10px;">
+              <span class="muted" style="font-size: 0.8rem; display: block;">Sof daromad</span>
+              <strong id="earn-net" style="font-size: 1.15rem; color: var(--ok);">0 so'm</strong>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <h2>Yangi takliflar</h2>
       <div id="offers-list"></div>
 
@@ -46,6 +73,14 @@
     const offersListEl = document.getElementById("offers-list");
     const activeListEl = document.getElementById("active-list");
 
+    const earningsLoadingEl = document.getElementById("earnings-loading");
+    const earningsErrorEl = document.getElementById("earnings-error");
+    const earningsContentEl = document.getElementById("earnings-content");
+    const earnCountEl = document.getElementById("earn-count");
+    const earnGrossEl = document.getElementById("earn-gross");
+    const earnCommissionEl = document.getElementById("earn-commission");
+    const earnNetEl = document.getElementById("earn-net");
+
     const STATUS_LABEL = {
       assigned: "Usta tayinlangan",
       in_progress: "Bajarilmoqda",
@@ -59,6 +94,28 @@
       if (diffMs <= 0) return "Muddati tugagan";
       const mins = Math.ceil(diffMs / 60000);
       return mins + " daqiqa qoldi";
+    }
+
+    async function loadEarnings() {
+      earningsLoadingEl.style.display = "block";
+      earningsLoadingEl.textContent = "Yuklanmoqda...";
+      earningsErrorEl.style.display = "none";
+      earningsContentEl.style.display = "none";
+
+      try {
+        const data = await apiFetch("/masters/me/earnings");
+        earningsLoadingEl.style.display = "none";
+        earningsContentEl.style.display = "block";
+
+        earnCountEl.textContent = String(data.completed_count);
+        earnGrossEl.textContent = formatSom(data.gross_total);
+        earnCommissionEl.textContent = formatSom(data.commission_total);
+        earnNetEl.textContent = formatSom(data.net_total);
+      } catch (err) {
+        earningsLoadingEl.style.display = "none";
+        earningsErrorEl.style.display = "block";
+        earningsErrorEl.textContent = "Daromad ma'lumotlarini yuklashda xatolik: " + err.message;
+      }
     }
 
     function renderOffer(offer) {
@@ -164,16 +221,149 @@
 
       const customer = document.createElement("p");
       customer.className = "muted";
-      customer.style.margin = "0";
+      customer.style.margin = "0 0 8px";
       customer.textContent = "Mijoz: " + order.customer_name;
       card.appendChild(customer);
 
-      if (order.agreed_price != null) {
-        const price = document.createElement("p");
-        price.style.margin = "6px 0 0";
-        price.style.fontWeight = "600";
-        price.textContent = String(order.agreed_price).replace(/\B(?=(\d{3})+(?!\d))/g, " ") + " so'm";
-        card.appendChild(price);
+      if (order.status === "assigned") {
+        if (order.agreed_price == null) {
+          // Narx belgilanmagan
+          const quote = order.latest_quote || order.latest_proposed_quote;
+          if (quote && quote.status === "proposed") {
+            const waitingBox = document.createElement("div");
+            waitingBox.style.background = "#fef3c7";
+            waitingBox.style.border = "1px solid #f59e0b";
+            waitingBox.style.color = "#92400e";
+            waitingBox.style.padding = "10px 12px";
+            waitingBox.style.borderRadius = "10px";
+            waitingBox.style.margin = "8px 0";
+
+            const waitTitle = document.createElement("div");
+            waitTitle.style.fontWeight = "600";
+            waitTitle.textContent = "Mijoz javobi kutilmoqda";
+
+            const waitPrice = document.createElement("div");
+            waitPrice.style.fontSize = "0.9rem";
+            waitPrice.textContent = "Taklif qilingan narx: " + formatSom(quote.price) + (quote.note ? " (" + quote.note + ")" : "");
+
+            waitingBox.append(waitTitle, waitPrice);
+            card.appendChild(waitingBox);
+          }
+
+          // Narx taklif qilish formasi
+          const formCard = document.createElement("div");
+          formCard.style.marginTop = "8px";
+          formCard.style.padding = "10px";
+          formCard.style.background = "var(--bg)";
+          formCard.style.borderRadius = "10px";
+
+          const formTitle = document.createElement("p");
+          formTitle.style.margin = "0 0 6px";
+          formTitle.style.fontWeight = "600";
+          formTitle.style.fontSize = "0.95rem";
+          formTitle.textContent = "Narx taklif qilish";
+          formCard.appendChild(formTitle);
+
+          const priceInput = document.createElement("input");
+          priceInput.type = "number";
+          priceInput.placeholder = "Narx (so'm)";
+          priceInput.min = "1000";
+          priceInput.style.marginBottom = "6px";
+
+          const noteInput = document.createElement("input");
+          noteInput.type = "text";
+          noteInput.placeholder = "Izoh (ixtiyoriy, masalan: detallar bilan)";
+          noteInput.maxLength = 500;
+          noteInput.style.marginBottom = "8px";
+
+          const submitBtn = document.createElement("button");
+          submitBtn.className = "btn btn-accent btn-block";
+          submitBtn.style.minHeight = "40px";
+          submitBtn.textContent = "Yuborish";
+
+          submitBtn.addEventListener("click", async () => {
+            const priceVal = parseInt(priceInput.value, 10);
+            if (!priceVal || priceVal <= 0) {
+              alert("Iltimos, to'g'ri narx kiriting");
+              return;
+            }
+            priceInput.disabled = true;
+            noteInput.disabled = true;
+            submitBtn.disabled = true;
+            submitBtn.textContent = "Yuborilmoqda...";
+
+            try {
+              await apiFetch("/orders/" + order.id + "/quotes", {
+                method: "POST",
+                body: JSON.stringify({
+                  price: priceVal,
+                  note: noteInput.value.trim() || undefined,
+                }),
+              });
+              load();
+            } catch (err) {
+              alert(err.message);
+              priceInput.disabled = false;
+              noteInput.disabled = false;
+              submitBtn.disabled = false;
+              submitBtn.textContent = "Yuborish";
+            }
+          });
+
+          formCard.append(priceInput, noteInput, submitBtn);
+          card.appendChild(formCard);
+        } else {
+          // Narx tasdiqlangan -> Ishni boshlash
+          const priceP = document.createElement("p");
+          priceP.style.margin = "6px 0 10px";
+          priceP.style.fontWeight = "600";
+          priceP.style.color = "var(--primary)";
+          priceP.textContent = "Kelishilgan narx: " + formatSom(order.agreed_price);
+          card.appendChild(priceP);
+
+          const startBtn = document.createElement("button");
+          startBtn.className = "btn btn-accent btn-block";
+          startBtn.textContent = "Ishni boshlash";
+          startBtn.addEventListener("click", async () => {
+            startBtn.disabled = true;
+            startBtn.textContent = "Boshlanmoqda...";
+            try {
+              await apiFetch("/orders/" + order.id + "/start", { method: "POST" });
+              load();
+            } catch (err) {
+              alert(err.message);
+              startBtn.disabled = false;
+              startBtn.textContent = "Ishni boshlash";
+            }
+          });
+          card.appendChild(startBtn);
+        }
+      } else if (order.status === "in_progress") {
+        // Ish jarayonda -> Yakunlash
+        const priceP = document.createElement("p");
+        priceP.style.margin = "6px 0 10px";
+        priceP.style.fontWeight = "600";
+        priceP.textContent = "Kelishilgan narx: " + formatSom(order.agreed_price);
+        card.appendChild(priceP);
+
+        const completeBtn = document.createElement("button");
+        completeBtn.className = "btn btn-accent btn-block";
+        completeBtn.textContent = "Yakunlash";
+        completeBtn.addEventListener("click", async () => {
+          if (!confirm("Ishni yakunlashni tasdiqlaysizmi?")) return;
+          completeBtn.disabled = true;
+          completeBtn.textContent = "Yakunlanmoqda...";
+          try {
+            const res = await apiFetch("/orders/" + order.id + "/complete", { method: "POST" });
+            alert("Komissiya: " + formatSom(res.commission_amount) + ", sizga: " + formatSom(res.net || res.net_amount));
+            load();
+          } catch (err) {
+            alert(err.message);
+            completeBtn.disabled = false;
+            completeBtn.textContent = "Yakunlash";
+          }
+        });
+        card.appendChild(completeBtn);
       }
 
       return card;
@@ -185,13 +375,17 @@
       noProfileEl.style.display = "none";
 
       try {
-        const data = await apiFetch("/masters/me/orders");
+        const [ordersData] = await Promise.all([
+          apiFetch("/masters/me/orders"),
+          loadEarnings(),
+        ]);
+
         stateEl.textContent = "";
         contentEl.style.display = "block";
 
         // Yangi takliflar
         offersListEl.replaceChildren();
-        const offers = data.pending_offers || data.offers || [];
+        const offers = ordersData.pending_offers || ordersData.offers || [];
         if (!offers.length) {
           const empty = document.createElement("div");
           empty.className = "card empty-state";
@@ -203,7 +397,7 @@
 
         // Faol ishlar
         activeListEl.replaceChildren();
-        const active = data.active_orders || [];
+        const active = ordersData.active_orders || [];
         if (!active.length) {
           const empty = document.createElement("div");
           empty.className = "card empty-state";

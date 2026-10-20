@@ -8,10 +8,12 @@ from sqlalchemy.orm import Session, selectinload
 from app.api.deps import require_role
 from app.db.session import get_db
 from app.models import Category, MasterProfile, MasterService, Order, OrderOffer, User
-from app.models.enums import OfferStatus, OrderStatus, PricingType, Role
+from app.models.enums import OfferStatus, OrderStatus, PricingType, QuoteStatus, Role
 from app.schemas.master import (
     AvailabilityIn,
     MasterActiveOrderItem,
+    MasterEarningOrderItem,
+    MasterEarningsOut,
     MasterMeOut,
     MasterOfferItem,
     MasterOrdersOut,
@@ -21,6 +23,7 @@ from app.schemas.master import (
     ServiceIn,
     ServiceOut,
 )
+from app.schemas.quote import QuoteOut
 from app.services import matching
 
 router = APIRouter(prefix="/masters", tags=["masters"])
@@ -233,32 +236,89 @@ def get_my_orders(
         .options(
             selectinload(Order.category),
             selectinload(Order.customer),
+            selectinload(Order.quotes),
         )
         .order_by(Order.id.desc())
     )
     active_orders_list = db.scalars(active_orders_stmt).all()
-    active_orders = [
-        MasterActiveOrderItem(
-            id=o.id,
-            category_id=o.category_id,
-            category_name=o.category.name,
-            description=o.description,
-            city=o.city,
-            district=o.district,
-            address=o.address,
-            customer_name=o.customer.full_name if o.customer else "",
-            customer_full_name=o.customer.full_name if o.customer else "",
-            status=o.status,
-            agreed_price=o.agreed_price,
-            created_at=o.created_at,
+    active_orders = []
+    for o in active_orders_list:
+        latest_proposed = next(
+            (
+                QuoteOut.model_validate(q)
+                for q in sorted(o.quotes or [], key=lambda x: x.id, reverse=True)
+                if q.status == QuoteStatus.PROPOSED
+            ),
+            None,
         )
-        for o in active_orders_list
-    ]
+        active_orders.append(
+            MasterActiveOrderItem(
+                id=o.id,
+                category_id=o.category_id,
+                category_name=o.category.name,
+                description=o.description,
+                city=o.city,
+                district=o.district,
+                address=o.address,
+                customer_name=o.customer.full_name if o.customer else "",
+                customer_full_name=o.customer.full_name if o.customer else "",
+                status=o.status,
+                agreed_price=o.agreed_price,
+                latest_quote=latest_proposed,
+                latest_proposed_quote=latest_proposed,
+                created_at=o.created_at,
+            )
+        )
 
     return MasterOrdersOut(
         pending_offers=pending_offers,
         offers=pending_offers,
         active_orders=active_orders,
+    )
+
+
+@router.get("/me/earnings", response_model=MasterEarningsOut)
+def get_my_earnings(
+    user: User = Depends(require_role(Role.MASTER)),
+    db: Session = Depends(get_db),
+):
+    profile = _own_profile(db, user)
+
+    stmt = (
+        select(Order)
+        .where(
+            Order.master_id == profile.id,
+            Order.status == OrderStatus.COMPLETED,
+        )
+        .options(selectinload(Order.category))
+        .order_by(Order.id.desc())
+    )
+    completed_orders = db.scalars(stmt).all()
+
+    completed_count = len(completed_orders)
+    gross_total = sum(o.agreed_price or 0 for o in completed_orders)
+    commission_total = sum(o.commission_amount or 0 for o in completed_orders)
+    net_total = gross_total - commission_total
+
+    recent_orders = [
+        MasterEarningOrderItem(
+            id=o.id,
+            category=o.category.name,
+            category_name=o.category.name,
+            agreed_price=o.agreed_price or 0,
+            commission_amount=o.commission_amount or 0,
+            net=(o.agreed_price or 0) - (o.commission_amount or 0),
+            net_amount=(o.agreed_price or 0) - (o.commission_amount or 0),
+        )
+        for o in completed_orders[:20]
+    ]
+
+    return MasterEarningsOut(
+        completed_count=completed_count,
+        gross_total=gross_total,
+        commission_total=commission_total,
+        net_total=net_total,
+        orders=recent_orders,
     )
 
 

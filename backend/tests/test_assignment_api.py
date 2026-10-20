@@ -282,6 +282,39 @@ def test_master_accept_happy_path(client, db, signup, santexnik_cat):
     assert data["status"] == "assigned"
     assert data["master_id"] == mp.id
     assert data["master_name"] == "Rustam Usta"
+    assert data["agreed_price"] == 100_000
+
+
+def test_master_accept_quote_type_leaves_agreed_price_null(client, db, signup, santexnik_cat):
+    """Quote turidagi xizmat uchun qabul qilinganda agreed_price null bo'ladi."""
+    h_m, u_m = signup("master", "+998902000099", "Quote Usta")
+    mp = _create_master_profile(db, u_m["id"], city="Toshkent", district="Chilonzor")
+    _add_service(db, mp.id, santexnik_cat.id, pricing_type=PricingType.QUOTE, base_price=None)
+
+    h_c, _ = signup("customer", "+998901000099", "Mijoz Sardor")
+    r_order = client.post(
+        ORDERS_URL,
+        json={
+            "category_id": santexnik_cat.id,
+            "description": "Quvurni ta'mirlash narx taklifi bilan",
+            "city": "Toshkent",
+            "district": "Chilonzor",
+            "address": "Qatortol 12",
+            "selection_mode": "manual",
+        },
+        headers=h_c,
+    )
+    order_id = r_order.json()["id"]
+
+    client.post(f"{ORDERS_URL}/{order_id}/select-master", json={"master_id": mp.id}, headers=h_c)
+    r_accept = client.post(f"{ORDERS_URL}/{order_id}/accept", headers=h_m)
+    assert r_accept.status_code == 200
+
+    r_get = client.get(f"{ORDERS_URL}/{order_id}", headers=h_c)
+    assert r_get.status_code == 200
+    data = r_get.json()
+    assert data["status"] == "assigned"
+    assert data["agreed_price"] is None
 
 
 def test_master_accept_auth_and_permissions(client, db, signup, santexnik_cat):

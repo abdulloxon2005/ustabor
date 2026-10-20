@@ -4,6 +4,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.enums import OrderStatus, SelectionMode
+from app.schemas.quote import QuoteOut
 
 
 def _clean(v: str, label: str) -> str:
@@ -114,3 +115,41 @@ class OrderListItem(BaseModel):
     master_full_name: str | None = None
     created_at: datetime
     offers: list[OfferOut] = []
+    quotes: list[QuoteOut] = []
+
+
+class OrderDetailOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    customer_id: int
+    category_id: int
+    category_name: str
+    master_id: int | None
+    master_name: str | None = None
+    master_full_name: str | None = None
+    description: str
+    city: str
+    district: str
+    address: str
+    status: OrderStatus
+    selection_mode: SelectionMode
+    agreed_price: int | None = None
+    final_price: int | None = None
+    commission_rate: int
+    quotes: list[QuoteOut] = []
+    created_at: datetime
+    history: list[HistoryOut] = []
+    offers: list[OfferOut] = []
+    note: str | None = None
+
+
+class OrderCompleteOut(BaseModel):
+    order_id: int
+    status: OrderStatus
+    price: int
+    commission_rate: int
+    commission_amount: int
+    net_amount: int
+    net: int
+    detail: str = "Buyurtma muvaffaqiyatli yakunlandi"

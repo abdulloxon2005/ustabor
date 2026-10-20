@@ -7,16 +7,19 @@ from sqlalchemy.orm import Session, selectinload
 from app.api.deps import require_role
 from app.core.config import settings
 from app.db.session import get_db
-from app.models import Category, MasterProfile, MasterService, Order, OrderOffer, OrderStatusHistory, User
+from app.models import Category, MasterProfile, MasterService, Order, OrderOffer, OrderStatusHistory, Quote, User
 from app.models.enums import OfferStatus, OrderStatus, Role, SelectionMode
 from app.schemas.order import (
     OfferOut,
+    OrderCompleteOut,
     OrderCreate,
+    OrderDetailOut,
     OrderListItem,
     OrderOut,
     SelectMasterIn,
 )
-from app.services import matching
+from app.schemas.quote import QuoteIn, QuoteOut
+from app.services import matching, pricing
 from app.services.order_flow import assign_master, create_order_history, transition
 
 router = APIRouter(prefix="/orders", tags=["orders"])
@@ -25,6 +28,7 @@ _ORDER_OPTS = (
     selectinload(Order.history),
     selectinload(Order.category),
     selectinload(Order.offers),
+    selectinload(Order.quotes),
     selectinload(Order.master).selectinload(MasterProfile.user),
 )
 
@@ -102,6 +106,48 @@ def _order_out(order: Order, db: Session, note: str | None = None) -> OrderOut:
     )
 
 
+def _order_detail_out(order: Order, db: Session, note: str | None = None) -> OrderDetailOut:
+    master_name = None
+    if order.master and order.master.user:
+        master_name = order.master.user.full_name
+    elif order.master_id:
+        mp = db.get(MasterProfile, order.master_id)
+        if mp:
+            u = db.get(User, mp.user_id)
+            master_name = u.full_name if u else None
+
+    offers = [_offer_out(o, db) for o in (order.offers or [])]
+    quotes = [
+        QuoteOut.model_validate(q)
+        for q in sorted(order.quotes or [], key=lambda x: x.id)
+    ]
+    final_price = order.agreed_price if order.status == OrderStatus.COMPLETED else None
+
+    return OrderDetailOut(
+        id=order.id,
+        customer_id=order.customer_id,
+        category_id=order.category_id,
+        category_name=order.category.name,
+        master_id=order.master_id,
+        master_name=master_name,
+        master_full_name=master_name,
+        description=order.description,
+        city=order.city,
+        district=order.district,
+        address=order.address,
+        status=order.status,
+        selection_mode=order.selection_mode,
+        agreed_price=order.agreed_price,
+        final_price=final_price,
+        commission_rate=order.commission_rate,
+        quotes=quotes,
+        created_at=order.created_at,
+        history=order.history,
+        offers=offers,
+        note=note,
+    )
+
+
 def _list_item(order: Order, db: Session) -> OrderListItem:
     master_name = None
     if order.master_id:
@@ -110,6 +156,10 @@ def _list_item(order: Order, db: Session) -> OrderListItem:
             u = db.get(User, mp.user_id)
             master_name = u.full_name if u else None
     offers = [_offer_out(o, db) for o in (order.offers or [])]
+    quotes = [
+        QuoteOut.model_validate(q)
+        for q in sorted(order.quotes or [], key=lambda x: x.id)
+    ]
     return OrderListItem(
         id=order.id,
         category_id=order.category_id,
@@ -125,6 +175,7 @@ def _list_item(order: Order, db: Session) -> OrderListItem:
         master_full_name=master_name,
         created_at=order.created_at,
         offers=offers,
+        quotes=quotes,
     )
 
 
@@ -193,6 +244,7 @@ def list_orders(
         .options(
             selectinload(Order.category),
             selectinload(Order.offers),
+            selectinload(Order.quotes),
         )
         .order_by(Order.id.desc())
         .limit(limit)
@@ -205,7 +257,7 @@ def list_orders(
     return [_list_item(o, db) for o in orders]
 
 
-@router.get("/{order_id}", response_model=OrderOut)
+@router.get("/{order_id}", response_model=OrderDetailOut)
 def get_order(
     order_id: int,
     user: User = Depends(require_role(Role.CUSTOMER)),
@@ -215,7 +267,7 @@ def get_order(
     matching.expire_stale_offers(db)
     db.commit()
     order = _own_order(order_id, user, db)
-    return _order_out(order, db)
+    return _order_detail_out(order, db)
 
 
 @router.post("/{order_id}/cancel", response_model=OrderOut)
@@ -366,6 +418,7 @@ def accept_offer(
         )
 
     order = assign_master(db, order_id, profile.id, user)
+    order = pricing.apply_fixed_price(db, order)
     db.commit()
     return {"detail": "Buyurtma qabul qilindi", "order_id": order.id}
 
@@ -409,3 +462,141 @@ def reject_offer(
         "detail": "Taklif rad etildi",
         "next_master_offered": next_offered,
     }
+
+
+# ---------- Narx takliflari (Quotes) ----------
+
+
+@router.post(
+    "/{order_id}/quotes",
+    response_model=QuoteOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def propose_quote(
+    order_id: int,
+    data: QuoteIn,
+    user: User = Depends(require_role(Role.MASTER)),
+    db: Session = Depends(get_db),
+):
+    profile = db.scalar(
+        select(MasterProfile).where(MasterProfile.user_id == user.id)
+    )
+    if profile is None or not profile.is_approved:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Tasdiqlangan usta profili topilmadi")
+
+    order = db.get(Order, order_id)
+    if order is None or order.master_id != profile.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Buyurtma topilmadi")
+
+    quote = pricing.propose_quote(
+        db, order, profile, price=data.price, note=data.note
+    )
+    db.commit()
+    db.refresh(quote)
+    return quote
+
+
+@router.post("/{order_id}/quotes/{quote_id}/accept")
+def accept_quote(
+    order_id: int,
+    quote_id: int,
+    user: User = Depends(require_role(Role.CUSTOMER)),
+    db: Session = Depends(get_db),
+):
+    order = db.get(Order, order_id)
+    if order is None or order.customer_id != user.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Buyurtma topilmadi")
+
+    quote = db.get(Quote, quote_id)
+    if quote is None or quote.order_id != order.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Narx taklifi topilmadi")
+
+    order = pricing.accept_quote(db, order, quote, user)
+    db.commit()
+    return {
+        "detail": "Narx taklifi qabul qilindi",
+        "order_id": order.id,
+        "agreed_price": order.agreed_price,
+    }
+
+
+@router.post("/{order_id}/quotes/{quote_id}/reject")
+def reject_quote(
+    order_id: int,
+    quote_id: int,
+    user: User = Depends(require_role(Role.CUSTOMER)),
+    db: Session = Depends(get_db),
+):
+    order = db.get(Order, order_id)
+    if order is None or order.customer_id != user.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Buyurtma topilmadi")
+
+    quote = db.get(Quote, quote_id)
+    if quote is None or quote.order_id != order.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Narx taklifi topilmadi")
+
+    pricing.reject_quote(db, order, quote, user)
+    db.commit()
+    return {
+        "detail": "Narx taklifi rad etildi",
+        "quote_id": quote.id,
+    }
+
+
+# ---------- Ishni boshlash va yakunlash ----------
+
+
+@router.post("/{order_id}/start")
+def start_order(
+    order_id: int,
+    user: User = Depends(require_role(Role.MASTER)),
+    db: Session = Depends(get_db),
+):
+    profile = db.scalar(
+        select(MasterProfile).where(MasterProfile.user_id == user.id)
+    )
+    if profile is None or not profile.is_approved:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Tasdiqlangan usta profili topilmadi")
+
+    order = db.get(Order, order_id)
+    if order is None or order.master_id != profile.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Buyurtma topilmadi")
+
+    order = pricing.start_order(db, order, user)
+    db.commit()
+    return {
+        "detail": "Ish boshlandi",
+        "order_id": order.id,
+        "status": order.status,
+    }
+
+
+@router.post("/{order_id}/complete", response_model=OrderCompleteOut)
+def complete_order(
+    order_id: int,
+    user: User = Depends(require_role(Role.MASTER)),
+    db: Session = Depends(get_db),
+):
+    profile = db.scalar(
+        select(MasterProfile).where(MasterProfile.user_id == user.id)
+    )
+    if profile is None or not profile.is_approved:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Tasdiqlangan usta profili topilmadi")
+
+    order = db.get(Order, order_id)
+    if order is None or order.master_id != profile.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Buyurtma topilmadi")
+
+    order = pricing.complete_order(db, order, user)
+    db.commit()
+    net = order.agreed_price - order.commission_amount
+    return OrderCompleteOut(
+        order_id=order.id,
+        status=order.status,
+        price=order.agreed_price,
+        commission_rate=order.commission_rate,
+        commission_amount=order.commission_amount,
+        net_amount=net,
+        net=net,
+        detail="Ish muvaffaqiyatli yakunlandi",
+    )
