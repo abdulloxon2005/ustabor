@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#2563eb" />
+  <title>Kirish - UstaBor</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body class="auth-page">
+  <header class="app-header">
+    <a class="brand" href="index.html">UstaBor</a>
+  </header>
+
+  <main class="container">
+    <form id="form" class="card auth-card" novalidate>
+      <h1>Kirish</h1>
+      <p class="muted">Telefon raqami va parolingizni kiriting</p>
+
+      <label for="phone">Telefon raqami</label>
+      <input id="phone" name="phone" type="tel" inputmode="tel" autocomplete="tel"
+             placeholder="+998 90 123 45 67" required />
+
+      <label for="password">Parol</label>
+      <input id="password" name="password" type="password"
+             autocomplete="current-password" required />
+
+      <div id="error" class="form-error" role="alert"></div>
+
+      <button id="submit" class="btn btn-block" type="submit">Kirish</button>
+
+      <p class="auth-switch">Akkauntingiz yo'qmi? <a href="register.html">Ro'yxatdan o'tish</a></p>
+    </form>
+  </main>
+
+  <script src="js/api.js"></script>
+  <script>
+    // Allaqachon kirgan bo'lsa, o'z sahifasiga yo'naltiriladi
+    if (getToken() && getUser()) {
+      window.location.replace(homeFor(getUser()));
+    }
+
+    const form = document.getElementById("form");
+    const submit = document.getElementById("submit");
+    const errorEl = document.getElementById("error");
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      errorEl.textContent = "";
+      const phone = form.phone.value.trim();
+      const password = form.password.value;
+      if (!phone || !password) {
+        errorEl.textContent = "Telefon raqami va parolni kiriting";
+        return;
+      }
+
+      submit.disabled = true;
+      submit.textContent = "Yuborilmoqda...";
+      try {
+        const data = await apiFetch("/auth/login", {
+          method: "POST",
+          body: JSON.stringify({ phone, password }),
+        });
+        saveSession(data.access_token, data.user);
+        window.location.replace(homeFor(data.user));
+      } catch (err) {
+        errorEl.textContent = err.message;
+        submit.disabled = false;
+        submit.textContent = "Kirish";
+      }
+    });
+  </script>
+</body>
+</html>

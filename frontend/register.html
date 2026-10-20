@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#2563eb" />
+  <title>Ro'yxatdan o'tish - UstaBor</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body class="auth-page">
+  <header class="app-header">
+    <a class="brand" href="index.html">UstaBor</a>
+  </header>
+
+  <main class="container">
+    <form id="form" class="card auth-card" novalidate>
+      <h1>Ro'yxatdan o'tish</h1>
+      <p class="muted">Yangi akkaunt yarating</p>
+
+      <label id="role-label">Men</label>
+      <div class="segmented" role="radiogroup" aria-labelledby="role-label">
+        <label>
+          <input type="radio" name="role" value="customer" checked />
+          <span>Mijoz</span>
+        </label>
+        <label>
+          <input type="radio" name="role" value="master" />
+          <span>Usta</span>
+        </label>
+      </div>
+
+      <label for="full_name">Ism va familiya</label>
+      <input id="full_name" name="full_name" type="text" autocomplete="name"
+             minlength="2" maxlength="120" required />
+
+      <label for="phone">Telefon raqami</label>
+      <input id="phone" name="phone" type="tel" inputmode="tel" autocomplete="tel"
+             placeholder="+998 90 123 45 67" required />
+
+      <label for="password">Parol (kamida 8 ta belgi)</label>
+      <input id="password" name="password" type="password"
+             autocomplete="new-password" minlength="8" maxlength="72" required />
+
+      <div id="error" class="form-error" role="alert"></div>
+
+      <button id="submit" class="btn btn-block" type="submit">Ro'yxatdan o'tish</button>
+
+      <p class="auth-switch">Akkauntingiz bormi? <a href="login.html">Kirish</a></p>
+    </form>
+  </main>
+
+  <script src="js/api.js"></script>
+  <script>
+    // Allaqachon kirgan bo'lsa, o'z sahifasiga yo'naltiriladi
+    if (getToken() && getUser()) {
+      window.location.replace(homeFor(getUser()));
+    }
+
+    const form = document.getElementById("form");
+    const submit = document.getElementById("submit");
+    const errorEl = document.getElementById("error");
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      errorEl.textContent = "";
+      const payload = {
+        role: form.role.value,
+        full_name: form.full_name.value.trim(),
+        phone: form.phone.value.trim(),
+        password: form.password.value,
+      };
+      if (payload.full_name.length < 2) {
+        errorEl.textContent = "Ism kamida 2 ta belgidan iborat bo'lishi kerak";
+        return;
+      }
+      if (!payload.phone) {
+        errorEl.textContent = "Telefon raqamini kiriting";
+        return;
+      }
+      if (payload.password.length < 8) {
+        errorEl.textContent = "Parol kamida 8 ta belgidan iborat bo'lishi kerak";
+        return;
+      }
+
+      submit.disabled = true;
+      submit.textContent = "Yuborilmoqda...";
+      try {
+        const data = await apiFetch("/auth/register", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+        saveSession(data.access_token, data.user);
+        window.location.replace(homeFor(data.user));
+      } catch (err) {
+        errorEl.textContent = err.message;
+        submit.disabled = false;
+        submit.textContent = "Ro'yxatdan o'tish";
+      }
+    });
+  </script>
+</body>
+</html>

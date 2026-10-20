@@ -8,15 +8,11 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import models  # noqa: F401  (modellarni Base.metadata ga yuklaydi)
+from app.core.security import hash_password
 from app.db.base import Base
 from app.db.session import SessionLocal, engine
 from app.main import app
-
-
-@pytest.fixture
-def client():
-    with TestClient(app) as c:
-        yield c
+from app.models.enums import Role
 
 
 @pytest.fixture
@@ -29,3 +25,37 @@ def db():
     finally:
         session.close()
         Base.metadata.drop_all(engine)
+
+
+@pytest.fixture
+def client(db):
+    # db ga bog'liq: jadvallar client ishlatilishidan oldin tayyor bo'ladi
+    with TestClient(app) as c:
+        yield c
+
+
+@pytest.fixture
+def make_admin(db):
+    """Admin faqat bazaga to'g'ridan-to'g'ri qo'shiladi (API orqali emas)."""
+
+    def _make(phone="+998900000000", password="admin12345", full_name="Admin"):
+        user = models.User(
+            phone=phone,
+            password_hash=hash_password(password),
+            full_name=full_name,
+            role=Role.ADMIN,
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+        return user
+
+    return _make
+
+
+@pytest.fixture
+def auth_header():
+    def _header(token: str) -> dict:
+        return {"Authorization": f"Bearer {token}"}
+
+    return _header
