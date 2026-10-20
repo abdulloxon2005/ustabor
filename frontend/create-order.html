@@ -120,8 +120,21 @@
       submit.disabled = true;
       submit.textContent = "Yuborilmoqda...";
       try {
-        await apiFetch("/orders", { method: "POST", body: JSON.stringify(payload) });
-        window.location.replace("my-orders.html");
+        const res = await apiFetch("/orders", { method: "POST", body: JSON.stringify(payload) });
+        if (payload.selection_mode === "manual") {
+          const q = new URLSearchParams({
+            category_id: payload.category_id,
+            city: payload.city,
+            district: payload.district,
+            order_id: res.id,
+          });
+          window.location.replace("masters.html?" + q.toString());
+        } else {
+          if (res.note) {
+            sessionStorage.setItem("order_note", res.note);
+          }
+          window.location.replace("my-orders.html");
+        }
       } catch (err) {
         errorEl.textContent = err.message;
         submit.disabled = false;

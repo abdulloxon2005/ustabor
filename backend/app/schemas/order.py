@@ -47,6 +47,10 @@ class OrderCreate(BaseModel):
         return _clean(v, "Manzil")
 
 
+class SelectMasterIn(BaseModel):
+    master_id: int
+
+
 class HistoryOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -57,6 +61,17 @@ class HistoryOut(BaseModel):
     created_at: datetime
 
 
+class OfferOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    master_id: int
+    master_name: str
+    master_full_name: str = ""
+    status: str
+    expires_at: datetime | None
+
+
 class OrderOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -65,6 +80,8 @@ class OrderOut(BaseModel):
     category_id: int
     category_name: str
     master_id: int | None
+    master_name: str | None = None
+    master_full_name: str | None = None
     description: str
     city: str
     district: str
@@ -76,6 +93,8 @@ class OrderOut(BaseModel):
     commission_amount: int | None
     created_at: datetime
     history: list[HistoryOut]
+    offers: list[OfferOut] = []
+    note: str | None = None
 
 
 class OrderListItem(BaseModel):
@@ -90,4 +109,8 @@ class OrderListItem(BaseModel):
     status: OrderStatus
     selection_mode: SelectionMode
     agreed_price: int | None
+    master_id: int | None = None
+    master_name: str | None = None
+    master_full_name: str | None = None
     created_at: datetime
+    offers: list[OfferOut] = []

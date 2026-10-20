@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Body, Depends, HTTPException, status
 from sqlalchemy import exists, func, select
 from sqlalchemy.exc import IntegrityError
@@ -5,17 +7,21 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.api.deps import require_role
 from app.db.session import get_db
-from app.models import Category, MasterProfile, MasterService, User
-from app.models.enums import PricingType, Role
+from app.models import Category, MasterProfile, MasterService, Order, OrderOffer, User
+from app.models.enums import OfferStatus, OrderStatus, PricingType, Role
 from app.schemas.master import (
     AvailabilityIn,
+    MasterActiveOrderItem,
     MasterMeOut,
+    MasterOfferItem,
+    MasterOrdersOut,
     MasterPublicOut,
     ProfileCreate,
     ProfileUpdate,
     ServiceIn,
     ServiceOut,
 )
+from app.services import matching
 
 router = APIRouter(prefix="/masters", tags=["masters"])
 
@@ -168,6 +174,93 @@ def set_availability(
     profile.is_available = data.is_available
     db.commit()
     return _me(_own_profile(db, user))
+
+
+def _is_expired(expires_at: datetime | None) -> bool:
+    if expires_at is None:
+        return False
+    now = datetime.now(timezone.utc)
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    return expires_at < now
+
+
+@router.get("/me/orders", response_model=MasterOrdersOut)
+def get_my_orders(
+    user: User = Depends(require_role(Role.MASTER)),
+    db: Session = Depends(get_db),
+):
+    profile = _own_profile(db, user)
+    matching.expire_stale_offers(db)
+    db.commit()
+
+    offers_stmt = (
+        select(OrderOffer)
+        .join(Order, Order.id == OrderOffer.order_id)
+        .where(
+            OrderOffer.master_id == profile.id,
+            OrderOffer.status == OfferStatus.PENDING,
+            Order.status == OrderStatus.SEARCHING,
+        )
+        .options(
+            selectinload(OrderOffer.order).selectinload(Order.category),
+        )
+        .order_by(OrderOffer.id.desc())
+    )
+    raw_offers = db.scalars(offers_stmt).all()
+    pending_offers = [
+        MasterOfferItem(
+            id=o.id,
+            order_id=o.order_id,
+            category_id=o.order.category_id,
+            category_name=o.order.category.name,
+            description=o.order.description,
+            city=o.order.city,
+            district=o.order.district,
+            expires_at=o.expires_at,
+            created_at=o.created_at,
+        )
+        for o in raw_offers
+        if not _is_expired(o.expires_at)
+    ]
+
+    active_orders_stmt = (
+        select(Order)
+        .where(
+            Order.master_id == profile.id,
+            Order.status.in_([OrderStatus.ASSIGNED, OrderStatus.IN_PROGRESS]),
+        )
+        .options(
+            selectinload(Order.category),
+            selectinload(Order.customer),
+        )
+        .order_by(Order.id.desc())
+    )
+    active_orders_list = db.scalars(active_orders_stmt).all()
+    active_orders = [
+        MasterActiveOrderItem(
+            id=o.id,
+            category_id=o.category_id,
+            category_name=o.category.name,
+            description=o.description,
+            city=o.city,
+            district=o.district,
+            address=o.address,
+            customer_name=o.customer.full_name if o.customer else "",
+            customer_full_name=o.customer.full_name if o.customer else "",
+            status=o.status,
+            agreed_price=o.agreed_price,
+            created_at=o.created_at,
+        )
+        for o in active_orders_list
+    ]
+
+    return MasterOrdersOut(
+        pending_offers=pending_offers,
+        offers=pending_offers,
+        active_orders=active_orders,
+    )
+
 
 
 # ---------- Ommaviy ro'yxat ----------

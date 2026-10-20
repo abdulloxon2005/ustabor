@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Literal
 
 from pydantic import (
@@ -10,7 +11,7 @@ from pydantic import (
     model_validator,
 )
 
-from app.models.enums import PricingType
+from app.models.enums import OrderStatus, PricingType
 
 MAX_PRICE = 1_000_000_000  # 1 mlrd so'm: aqlga sig'adigan yuqori chegara
 
@@ -127,3 +128,41 @@ class ApprovalOut(BaseModel):
 
     id: int
     is_approved: bool
+
+
+class MasterOfferItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    order_id: int
+    category_id: int
+    category_name: str
+    description: str
+    city: str
+    district: str
+    expires_at: datetime | None
+    created_at: datetime
+
+
+class MasterActiveOrderItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    category_id: int
+    category_name: str
+    description: str
+    city: str
+    district: str
+    address: str
+    customer_name: str
+    customer_full_name: str = ""
+    status: OrderStatus
+    agreed_price: int | None
+    created_at: datetime
+
+
+class MasterOrdersOut(BaseModel):
+    pending_offers: list[MasterOfferItem]
+    offers: list[MasterOfferItem] = []
+    active_orders: list[MasterActiveOrderItem]
+

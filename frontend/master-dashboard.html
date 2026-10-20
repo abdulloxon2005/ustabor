@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#2563eb" />
+  <title>Usta paneli - UstaBor</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <header class="app-header">
+    <a class="brand" href="master-dashboard.html">UstaBor</a>
+    <button class="btn btn-outline" onclick="logout()" style="min-height:36px; padding:0 12px; font-size:0.85rem;">Chiqish</button>
+  </header>
+
+  <main class="container">
+    <div id="no-profile-card" class="card" style="display:none; background:#fee2e2; border-color:#ef4444; color:#991b1b;">
+      <p style="margin:0; font-weight:600;">Usta profili topilmadi. Avval profil yarating</p>
+    </div>
+
+    <h1>Usta paneli</h1>
+    <p id="state" class="muted" aria-live="polite">Yuklanmoqda...</p>
+
+    <div id="content" style="display:none;">
+      <h2>Yangi takliflar</h2>
+      <div id="offers-list"></div>
+
+      <h2>Faol ishlar</h2>
+      <div id="active-list"></div>
+    </div>
+  </main>
+
+  <nav class="bottom-nav">
+    <a class="active" href="master-dashboard.html"><span class="icon">📋</span>Takliflar</a>
+    <a href="#" onclick="logout(); return false;"><span class="icon">🚪</span>Chiqish</a>
+  </nav>
+
+  <script src="js/api.js"></script>
+  <script>
+    const user = requireAuth(["master"]);
+    if (!user) throw new Error("redirect");
+
+    const stateEl = document.getElementById("state");
+    const contentEl = document.getElementById("content");
+    const noProfileEl = document.getElementById("no-profile-card");
+    const offersListEl = document.getElementById("offers-list");
+    const activeListEl = document.getElementById("active-list");
+
+    const STATUS_LABEL = {
+      assigned: "Usta tayinlangan",
+      in_progress: "Bajarilmoqda",
+      completed: "Yakunlangan",
+      cancelled: "Bekor qilingan",
+    };
+
+    function formatRemaining(expiresAt) {
+      if (!expiresAt) return "";
+      const diffMs = new Date(expiresAt) - new Date();
+      if (diffMs <= 0) return "Muddati tugagan";
+      const mins = Math.ceil(diffMs / 60000);
+      return mins + " daqiqa qoldi";
+    }
+
+    function renderOffer(offer) {
+      const card = document.createElement("div");
+      card.className = "card order-card";
+
+      const row = document.createElement("div");
+      row.className = "card-row";
+      const cat = document.createElement("strong");
+      cat.textContent = offer.category_name;
+      const timer = document.createElement("span");
+      timer.className = "badge";
+      timer.style.background = "#fef3c7";
+      timer.style.color = "#92400e";
+      timer.textContent = formatRemaining(offer.expires_at);
+      row.append(cat, timer);
+      card.appendChild(row);
+
+      const desc = document.createElement("p");
+      desc.style.margin = "8px 0 4px";
+      desc.textContent = offer.description;
+      card.appendChild(desc);
+
+      const place = document.createElement("p");
+      place.className = "muted";
+      place.style.margin = "0 0 12px";
+      place.textContent = offer.city + ", " + offer.district;
+      card.appendChild(place);
+
+      const btnRow = document.createElement("div");
+      btnRow.style.display = "flex";
+      btnRow.style.gap = "8px";
+
+      const acceptBtn = document.createElement("button");
+      acceptBtn.className = "btn btn-accent";
+      acceptBtn.style.flex = "1";
+      acceptBtn.textContent = "Qabul qilish";
+
+      const rejectBtn = document.createElement("button");
+      rejectBtn.className = "btn btn-outline";
+      rejectBtn.style.flex = "1";
+      rejectBtn.textContent = "Rad etish";
+
+      acceptBtn.addEventListener("click", async () => {
+        acceptBtn.disabled = true;
+        rejectBtn.disabled = true;
+        acceptBtn.textContent = "Qabul qilinmoqda...";
+        try {
+          await apiFetch("/orders/" + offer.order_id + "/accept", { method: "POST" });
+          load();
+        } catch (err) {
+          alert(err.message);
+          acceptBtn.disabled = false;
+          rejectBtn.disabled = false;
+          acceptBtn.textContent = "Qabul qilish";
+        }
+      });
+
+      rejectBtn.addEventListener("click", async () => {
+        if (!confirm("Taklifni rad etishni xohlaysizmi?")) return;
+        acceptBtn.disabled = true;
+        rejectBtn.disabled = true;
+        rejectBtn.textContent = "Rad etilmoqda...";
+        try {
+          await apiFetch("/orders/" + offer.order_id + "/reject", { method: "POST" });
+          load();
+        } catch (err) {
+          alert(err.message);
+          acceptBtn.disabled = false;
+          rejectBtn.disabled = false;
+          rejectBtn.textContent = "Rad etish";
+        }
+      });
+
+      btnRow.append(acceptBtn, rejectBtn);
+      card.appendChild(btnRow);
+      return card;
+    }
+
+    function renderActiveOrder(order) {
+      const card = document.createElement("div");
+      card.className = "card order-card";
+
+      const row = document.createElement("div");
+      row.className = "card-row";
+      const cat = document.createElement("strong");
+      cat.textContent = order.category_name;
+      const badge = document.createElement("span");
+      badge.className = "badge badge-" + order.status;
+      badge.textContent = STATUS_LABEL[order.status] || order.status;
+      row.append(cat, badge);
+      card.appendChild(row);
+
+      const desc = document.createElement("p");
+      desc.style.margin = "8px 0 4px";
+      desc.textContent = order.description;
+      card.appendChild(desc);
+
+      const addr = document.createElement("p");
+      addr.style.margin = "4px 0";
+      addr.textContent = "Manzil: " + order.city + ", " + order.district + ", " + order.address;
+      card.appendChild(addr);
+
+      const customer = document.createElement("p");
+      customer.className = "muted";
+      customer.style.margin = "0";
+      customer.textContent = "Mijoz: " + order.customer_name;
+      card.appendChild(customer);
+
+      if (order.agreed_price != null) {
+        const price = document.createElement("p");
+        price.style.margin = "6px 0 0";
+        price.style.fontWeight = "600";
+        price.textContent = String(order.agreed_price).replace(/\B(?=(\d{3})+(?!\d))/g, " ") + " so'm";
+        card.appendChild(price);
+      }
+
+      return card;
+    }
+
+    async function load() {
+      stateEl.textContent = "Yuklanmoqda...";
+      stateEl.className = "muted";
+      noProfileEl.style.display = "none";
+
+      try {
+        const data = await apiFetch("/masters/me/orders");
+        stateEl.textContent = "";
+        contentEl.style.display = "block";
+
+        // Yangi takliflar
+        offersListEl.replaceChildren();
+        const offers = data.pending_offers || data.offers || [];
+        if (!offers.length) {
+          const empty = document.createElement("div");
+          empty.className = "card empty-state";
+          empty.textContent = "Hozircha taklif yo'q";
+          offersListEl.appendChild(empty);
+        } else {
+          offers.forEach((o) => offersListEl.appendChild(renderOffer(o)));
+        }
+
+        // Faol ishlar
+        activeListEl.replaceChildren();
+        const active = data.active_orders || [];
+        if (!active.length) {
+          const empty = document.createElement("div");
+          empty.className = "card empty-state";
+          empty.textContent = "Hozircha faol ishlar yo'q";
+          activeListEl.appendChild(empty);
+        } else {
+          active.forEach((a) => activeListEl.appendChild(renderActiveOrder(a)));
+        }
+      } catch (err) {
+        stateEl.textContent = "";
+        if (err.message && err.message.toLowerCase().includes("profil")) {
+          noProfileEl.style.display = "block";
+          noProfileEl.textContent = "Usta profili topilmadi. Avval profil yarating";
+        } else {
+          stateEl.textContent = "Xatolik: " + err.message;
+          stateEl.className = "err";
+        }
+      }
+    }
+
+    load();
+  </script>
+</body>
+</html>

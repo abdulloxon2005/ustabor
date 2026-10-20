@@ -33,6 +33,19 @@
     const stateEl = document.getElementById("state");
     const listEl = document.getElementById("list");
 
+    const orderNote = sessionStorage.getItem("order_note");
+    if (orderNote) {
+      sessionStorage.removeItem("order_note");
+      const noteBanner = document.createElement("div");
+      noteBanner.className = "card";
+      noteBanner.style.background = "#fef3c7";
+      noteBanner.style.border = "1px solid #f59e0b";
+      noteBanner.style.color = "#92400e";
+      noteBanner.style.marginBottom = "12px";
+      noteBanner.textContent = orderNote;
+      document.querySelector("main.container").insertBefore(noteBanner, stateEl);
+    }
+
     const STATUS_LABEL = {
       searching: "Qidirilmoqda",
       assigned: "Usta tayinlangan",
@@ -82,6 +95,48 @@
         price.style.fontWeight = "600";
         price.textContent = String(o.agreed_price).replace(/\B(?=(\d{3})+(?!\d))/g, " ") + " so'm";
         card.appendChild(price);
+      }
+
+      // Taklif holati
+      const offerStateEl = document.createElement("p");
+      offerStateEl.style.margin = "8px 0 0";
+      offerStateEl.style.fontWeight = "500";
+      offerStateEl.style.fontSize = "0.9rem";
+
+      const offers = o.offers || [];
+      const hasPending = offers.some((x) => x.status === "pending");
+      const latestOffer = offers.length ? offers[offers.length - 1] : null;
+
+      if (o.status === "assigned" || o.master_name) {
+        offerStateEl.textContent = "Usta biriktirildi: " + (o.master_name || "Usta");
+        offerStateEl.style.color = "var(--primary)";
+        card.appendChild(offerStateEl);
+      } else if (o.status === "searching") {
+        if (hasPending) {
+          offerStateEl.textContent = "Usta javobi kutilmoqda";
+          offerStateEl.style.color = "#d97706";
+          card.appendChild(offerStateEl);
+        } else if (latestOffer && latestOffer.status === "rejected") {
+          offerStateEl.textContent = "Usta rad etdi";
+          offerStateEl.style.color = "var(--err)";
+          card.appendChild(offerStateEl);
+        }
+
+        // Qidiruv holatidagi manual buyurtma va pending taklif bo'lmasa -> Usta tanlash
+        if (o.selection_mode === "manual" && !hasPending) {
+          const chooseLink = document.createElement("a");
+          chooseLink.className = "btn btn-outline btn-block";
+          chooseLink.style.marginTop = "8px";
+          chooseLink.textContent = "Usta tanlash";
+          const q = new URLSearchParams({
+            category_id: o.category_id,
+            city: o.city,
+            district: o.district,
+            order_id: o.id,
+          });
+          chooseLink.href = "masters.html?" + q.toString();
+          card.appendChild(chooseLink);
+        }
       }
 
       // Bekor qilish tugmasi

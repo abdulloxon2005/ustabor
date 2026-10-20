@@ -1,16 +1,41 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import exists, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.api.deps import require_role
 from app.core.config import settings
 from app.db.session import get_db
-from app.models import Category, Order, OrderStatusHistory, User
-from app.models.enums import OrderStatus, Role, SelectionMode
-from app.schemas.order import OrderCreate, OrderListItem, OrderOut
-from app.services.order_flow import create_order_history, transition
+from app.models import Category, MasterProfile, MasterService, Order, OrderOffer, OrderStatusHistory, User
+from app.models.enums import OfferStatus, OrderStatus, Role, SelectionMode
+from app.schemas.order import (
+    OfferOut,
+    OrderCreate,
+    OrderListItem,
+    OrderOut,
+    SelectMasterIn,
+)
+from app.services import matching
+from app.services.order_flow import assign_master, create_order_history, transition
 
 router = APIRouter(prefix="/orders", tags=["orders"])
+
+_ORDER_OPTS = (
+    selectinload(Order.history),
+    selectinload(Order.category),
+    selectinload(Order.offers),
+    selectinload(Order.master).selectinload(MasterProfile.user),
+)
+
+
+def _is_expired(expires_at: datetime | None) -> bool:
+    if expires_at is None:
+        return False
+    now = datetime.now(timezone.utc)
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    return expires_at < now
 
 
 def _own_order(order_id: int, user: User, db: Session) -> Order:
@@ -18,23 +43,49 @@ def _own_order(order_id: int, user: User, db: Session) -> Order:
     order = db.scalar(
         select(Order)
         .where(Order.id == order_id, Order.customer_id == user.id)
-        .options(
-            selectinload(Order.history),
-            selectinload(Order.category),
-        )
+        .options(*_ORDER_OPTS)
     )
     if order is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Buyurtma topilmadi")
     return order
 
 
-def _order_out(order: Order) -> OrderOut:
+def _offer_out(offer: OrderOffer, db: Session) -> OfferOut:
+    """OrderOffer -> OfferOut (master_name bilan)."""
+    master = db.get(MasterProfile, offer.master_id)
+    master_name = ""
+    if master:
+        user = db.get(User, master.user_id)
+        master_name = user.full_name if user else ""
+    return OfferOut(
+        id=offer.id,
+        master_id=offer.master_id,
+        master_name=master_name,
+        master_full_name=master_name,
+        status=offer.status.value if hasattr(offer.status, "value") else str(offer.status),
+        expires_at=offer.expires_at,
+    )
+
+
+def _order_out(order: Order, db: Session, note: str | None = None) -> OrderOut:
+    master_name = None
+    if order.master and order.master.user:
+        master_name = order.master.user.full_name
+    elif order.master_id:
+        mp = db.get(MasterProfile, order.master_id)
+        if mp:
+            u = db.get(User, mp.user_id)
+            master_name = u.full_name if u else None
+
+    offers = [_offer_out(o, db) for o in (order.offers or [])]
     return OrderOut(
         id=order.id,
         customer_id=order.customer_id,
         category_id=order.category_id,
         category_name=order.category.name,
         master_id=order.master_id,
+        master_name=master_name,
+        master_full_name=master_name,
         description=order.description,
         city=order.city,
         district=order.district,
@@ -46,7 +97,38 @@ def _order_out(order: Order) -> OrderOut:
         commission_amount=order.commission_amount,
         created_at=order.created_at,
         history=order.history,
+        offers=offers,
+        note=note,
     )
+
+
+def _list_item(order: Order, db: Session) -> OrderListItem:
+    master_name = None
+    if order.master_id:
+        mp = db.get(MasterProfile, order.master_id)
+        if mp:
+            u = db.get(User, mp.user_id)
+            master_name = u.full_name if u else None
+    offers = [_offer_out(o, db) for o in (order.offers or [])]
+    return OrderListItem(
+        id=order.id,
+        category_id=order.category_id,
+        category_name=order.category.name,
+        description=order.description,
+        city=order.city,
+        district=order.district,
+        status=order.status,
+        selection_mode=order.selection_mode,
+        agreed_price=order.agreed_price,
+        master_id=order.master_id,
+        master_name=master_name,
+        master_full_name=master_name,
+        created_at=order.created_at,
+        offers=offers,
+    )
+
+
+# ==================== ENDPOINTS ====================
 
 
 @router.post("", response_model=OrderOut, status_code=status.HTTP_201_CREATED)
@@ -78,9 +160,17 @@ def create_order(
     db.add(order)
     db.flush()
     create_order_history(db, order, user)
+
+    note = None
+    if order.selection_mode == SelectionMode.AUTOMATIC:
+        matching.expire_stale_offers(db)
+        offer = matching.offer_next(db, order, user)
+        if offer is None:
+            note = "Mos usta topilmadi"
+
     db.commit()
     db.refresh(order)
-    return _order_out(_own_order(order.id, user, db))
+    return _order_out(_own_order(order.id, user, db), db, note=note)
 
 
 @router.get("", response_model=list[OrderListItem])
@@ -91,13 +181,19 @@ def list_orders(
     user: User = Depends(require_role(Role.CUSTOMER)),
     db: Session = Depends(get_db),
 ):
+    matching.expire_stale_offers(db)
+    db.commit()
+
     limit = min(max(limit, 1), 100)
     offset = max(offset, 0)
 
     stmt = (
         select(Order)
         .where(Order.customer_id == user.id)
-        .options(selectinload(Order.category))
+        .options(
+            selectinload(Order.category),
+            selectinload(Order.offers),
+        )
         .order_by(Order.id.desc())
         .limit(limit)
         .offset(offset)
@@ -106,21 +202,7 @@ def list_orders(
         stmt = stmt.where(Order.status == status_filter)
 
     orders = db.scalars(stmt).all()
-    return [
-        OrderListItem(
-            id=o.id,
-            category_id=o.category_id,
-            category_name=o.category.name,
-            description=o.description,
-            city=o.city,
-            district=o.district,
-            status=o.status,
-            selection_mode=o.selection_mode,
-            agreed_price=o.agreed_price,
-            created_at=o.created_at,
-        )
-        for o in orders
-    ]
+    return [_list_item(o, db) for o in orders]
 
 
 @router.get("/{order_id}", response_model=OrderOut)
@@ -129,7 +211,11 @@ def get_order(
     user: User = Depends(require_role(Role.CUSTOMER)),
     db: Session = Depends(get_db),
 ):
-    return _order_out(_own_order(order_id, user, db))
+    db.expire_all()
+    matching.expire_stale_offers(db)
+    db.commit()
+    order = _own_order(order_id, user, db)
+    return _order_out(order, db)
 
 
 @router.post("/{order_id}/cancel", response_model=OrderOut)
@@ -142,4 +228,184 @@ def cancel_order(
     transition(db, order, OrderStatus.CANCELLED, user)
     db.commit()
     db.refresh(order)
-    return _order_out(_own_order(order.id, user, db))
+    return _order_out(_own_order(order.id, user, db), db)
+
+
+# ---------- Manual usta tanlash ----------
+
+
+@router.post("/{order_id}/select-master")
+def select_master(
+    order_id: int,
+    data: SelectMasterIn,
+    user: User = Depends(require_role(Role.CUSTOMER)),
+    db: Session = Depends(get_db),
+):
+    # Muddati o'tgan takliflarni belgilash
+    matching.expire_stale_offers(db)
+    order = _own_order(order_id, user, db)
+
+    if order.selection_mode != SelectionMode.MANUAL:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Bu buyurtma uchun usta tanlash faqat qo'lda (manual) rejimda mumkin",
+        )
+    if order.status != OrderStatus.SEARCHING:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Buyurtma hozir qidiruv holatida emas",
+        )
+
+    # Pending taklif borligini tekshirish
+    if any(o.status == OfferStatus.PENDING for o in order.offers):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Avvalgi taklifga javob kutilmoqda",
+        )
+
+    # Usta mavjud va mos ekanligini tekshirish
+    master = db.get(MasterProfile, data.master_id)
+    if master is None:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "Usta topilmadi",
+        )
+    master_user = db.get(User, master.user_id)
+    if not master.is_approved:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Usta tasdiqlanmagan",
+        )
+    if not master.is_available:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Usta hozirda mavjud emas yoki band",
+        )
+    if not master_user or not master_user.is_active:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Usta foydalanuvchisi faol emas",
+        )
+    if master.city.strip().lower() != order.city.strip().lower():
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Usta boshqa shaharda joylashgan",
+        )
+
+    has_service = db.scalar(
+        select(
+            exists().where(
+                MasterService.master_id == master.id,
+                MasterService.category_id == order.category_id,
+            )
+        )
+    )
+    if not has_service:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Usta bu turdagi xizmatni ko'rsatmaydi",
+        )
+
+    existing_offer = db.scalar(
+        select(OrderOffer).where(
+            OrderOffer.order_id == order.id,
+            OrderOffer.master_id == master.id,
+        )
+    )
+    if existing_offer is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Bu ustaga allaqachon taklif yuborilgan",
+        )
+
+    offer = matching.create_offer(db, order, master)
+    db.commit()
+    db.refresh(offer)
+    return {"detail": "Taklif yuborildi", "offer_id": offer.id}
+
+
+# ---------- Usta qabul / rad ----------
+
+
+@router.post("/{order_id}/accept")
+def accept_offer(
+    order_id: int,
+    user: User = Depends(require_role(Role.MASTER)),
+    db: Session = Depends(get_db),
+):
+    profile = db.scalar(
+        select(MasterProfile).where(MasterProfile.user_id == user.id)
+    )
+    if profile is None or not profile.is_approved:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Tasdiqlangan usta profili topilmadi")
+
+    offer = db.scalar(
+        select(OrderOffer).where(
+            OrderOffer.order_id == order_id,
+            OrderOffer.master_id == profile.id,
+        )
+    )
+    if offer is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Taklif topilmadi")
+
+    if offer.status == OfferStatus.EXPIRED or (
+        offer.status == OfferStatus.PENDING and _is_expired(offer.expires_at)
+    ):
+        if offer.status == OfferStatus.PENDING:
+            offer.status = OfferStatus.EXPIRED
+            db.commit()
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Taklif muddati tugagan",
+        )
+
+    if offer.status != OfferStatus.PENDING:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Taklif muddati tugagan yoki bekor qilingan",
+        )
+
+    order = assign_master(db, order_id, profile.id, user)
+    db.commit()
+    return {"detail": "Buyurtma qabul qilindi", "order_id": order.id}
+
+
+@router.post("/{order_id}/reject")
+def reject_offer(
+    order_id: int,
+    user: User = Depends(require_role(Role.MASTER)),
+    db: Session = Depends(get_db),
+):
+    profile = db.scalar(
+        select(MasterProfile).where(MasterProfile.user_id == user.id)
+    )
+    if profile is None or not profile.is_approved:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Tasdiqlangan usta profili topilmadi")
+
+    offer = db.scalar(
+        select(OrderOffer).where(
+            OrderOffer.order_id == order_id,
+            OrderOffer.master_id == profile.id,
+            OrderOffer.status == OfferStatus.PENDING,
+        )
+    )
+    if offer is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Taklif topilmadi")
+
+    offer.status = OfferStatus.REJECTED
+
+    order = db.get(Order, order_id)
+    next_offered = False
+    if (
+        order
+        and order.selection_mode == SelectionMode.AUTOMATIC
+        and order.status == OrderStatus.SEARCHING
+    ):
+        next_offer = matching.offer_next(db, order, user)
+        next_offered = next_offer is not None
+
+    db.commit()
+    return {
+        "detail": "Taklif rad etildi",
+        "next_master_offered": next_offered,
+    }

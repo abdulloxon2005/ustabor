@@ -43,6 +43,9 @@
     const params = new URLSearchParams(window.location.search);
     const rawCat = params.get("category_id");
     const categoryId = rawCat && /^\d+$/.test(rawCat) ? rawCat : null;
+    const rawOrderId = params.get("order_id");
+    const orderId = rawOrderId && /^\d+$/.test(rawOrderId) ? rawOrderId : null;
+    const user = getUser();
 
     const form = document.getElementById("filters");
     const stateEl = document.getElementById("state");
@@ -109,6 +112,30 @@
         });
         card.appendChild(ul);
       }
+
+      if (orderId && user && user.role === "customer") {
+        const chooseBtn = document.createElement("button");
+        chooseBtn.className = "btn btn-block btn-accent";
+        chooseBtn.style.marginTop = "12px";
+        chooseBtn.textContent = "Tanlash";
+        chooseBtn.addEventListener("click", async () => {
+          chooseBtn.disabled = true;
+          chooseBtn.textContent = "Tanlanmoqda...";
+          try {
+            await apiFetch("/orders/" + orderId + "/select-master", {
+              method: "POST",
+              body: JSON.stringify({ master_id: m.id }),
+            });
+            window.location.replace("my-orders.html");
+          } catch (err) {
+            alert(err.message);
+            chooseBtn.disabled = false;
+            chooseBtn.textContent = "Tanlash";
+          }
+        });
+        card.appendChild(chooseBtn);
+      }
+
       return card;
     }
 
