@@ -1,11 +1,11 @@
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from sqlalchemy import exists, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.api.deps import require_role
-from app.core.config import settings
+from app.core.config import MAX_DB_INT, settings
 from app.db.session import get_db
 from app.models import Category, MasterProfile, MasterService, Order, OrderOffer, OrderStatusHistory, Quote, Review, User
 from app.models.enums import OfferStatus, OrderStatus, Role, SelectionMode
@@ -234,7 +234,7 @@ def create_order(
 def list_orders(
     status_filter: OrderStatus | None = None,
     limit: int = 20,
-    offset: int = 0,
+    offset: int = Query(default=0, le=MAX_DB_INT),
     user: User = Depends(require_role(Role.CUSTOMER)),
     db: Session = Depends(get_db),
 ):
@@ -242,7 +242,7 @@ def list_orders(
     db.commit()
 
     limit = min(max(limit, 1), 100)
-    offset = max(offset, 0)
+    offset = min(max(offset, 0), MAX_DB_INT)
 
     stmt = (
         select(Order)
@@ -265,7 +265,7 @@ def list_orders(
 
 @router.get("/{order_id}", response_model=OrderDetailOut)
 def get_order(
-    order_id: int,
+    order_id: int = Path(..., le=MAX_DB_INT),
     user: User = Depends(require_role(Role.CUSTOMER)),
     db: Session = Depends(get_db),
 ):
@@ -278,7 +278,7 @@ def get_order(
 
 @router.post("/{order_id}/cancel", response_model=OrderOut)
 def cancel_order(
-    order_id: int,
+    order_id: int = Path(..., le=MAX_DB_INT),
     user: User = Depends(require_role(Role.CUSTOMER)),
     db: Session = Depends(get_db),
 ):
@@ -294,8 +294,8 @@ def cancel_order(
 
 @router.post("/{order_id}/select-master")
 def select_master(
-    order_id: int,
     data: SelectMasterIn,
+    order_id: int = Path(..., le=MAX_DB_INT),
     user: User = Depends(require_role(Role.CUSTOMER)),
     db: Session = Depends(get_db),
 ):
@@ -387,7 +387,7 @@ def select_master(
 
 @router.post("/{order_id}/accept")
 def accept_offer(
-    order_id: int,
+    order_id: int = Path(..., le=MAX_DB_INT),
     user: User = Depends(require_role(Role.MASTER)),
     db: Session = Depends(get_db),
 ):
@@ -431,7 +431,7 @@ def accept_offer(
 
 @router.post("/{order_id}/reject")
 def reject_offer(
-    order_id: int,
+    order_id: int = Path(..., le=MAX_DB_INT),
     user: User = Depends(require_role(Role.MASTER)),
     db: Session = Depends(get_db),
 ):
@@ -479,8 +479,8 @@ def reject_offer(
     status_code=status.HTTP_201_CREATED,
 )
 def propose_quote(
-    order_id: int,
     data: QuoteIn,
+    order_id: int = Path(..., le=MAX_DB_INT),
     user: User = Depends(require_role(Role.MASTER)),
     db: Session = Depends(get_db),
 ):
@@ -504,8 +504,8 @@ def propose_quote(
 
 @router.post("/{order_id}/quotes/{quote_id}/accept")
 def accept_quote(
-    order_id: int,
-    quote_id: int,
+    order_id: int = Path(..., le=MAX_DB_INT),
+    quote_id: int = Path(..., le=MAX_DB_INT),
     user: User = Depends(require_role(Role.CUSTOMER)),
     db: Session = Depends(get_db),
 ):
@@ -532,8 +532,8 @@ def accept_quote(
 
 @router.post("/{order_id}/quotes/{quote_id}/reject")
 def reject_quote(
-    order_id: int,
-    quote_id: int,
+    order_id: int = Path(..., le=MAX_DB_INT),
+    quote_id: int = Path(..., le=MAX_DB_INT),
     user: User = Depends(require_role(Role.CUSTOMER)),
     db: Session = Depends(get_db),
 ):
@@ -558,7 +558,7 @@ def reject_quote(
 
 @router.post("/{order_id}/start")
 def start_order(
-    order_id: int,
+    order_id: int = Path(..., le=MAX_DB_INT),
     user: User = Depends(require_role(Role.MASTER)),
     db: Session = Depends(get_db),
 ):
@@ -583,7 +583,7 @@ def start_order(
 
 @router.post("/{order_id}/complete", response_model=OrderCompleteOut)
 def complete_order(
-    order_id: int,
+    order_id: int = Path(..., le=MAX_DB_INT),
     user: User = Depends(require_role(Role.MASTER)),
     db: Session = Depends(get_db),
 ):
@@ -614,8 +614,8 @@ def complete_order(
 
 @router.post("/{order_id}/review", response_model=ReviewOut, status_code=status.HTTP_201_CREATED)
 def submit_order_review(
-    order_id: int,
     data: ReviewCreate,
+    order_id: int = Path(..., le=MAX_DB_INT),
     user: User = Depends(require_role(Role.CUSTOMER)),
     db: Session = Depends(get_db),
 ):

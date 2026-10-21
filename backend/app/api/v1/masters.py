@@ -1,11 +1,12 @@
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Body, Depends, HTTPException, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, status
 from sqlalchemy import exists, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from app.api.deps import require_role
+from app.core.config import MAX_DB_INT
 from app.db.session import get_db
 from app.models import Category, MasterProfile, MasterService, Order, OrderOffer, Review, User
 from app.models.enums import OfferStatus, OrderStatus, PricingType, QuoteStatus, Role
@@ -328,7 +329,7 @@ def get_my_earnings(
 
 @router.get("", response_model=list[MasterPublicOut])
 def list_masters(
-    category_id: int | None = None,
+    category_id: int | None = Query(default=None, le=MAX_DB_INT),
     city: str | None = None,
     district: str | None = None,
     db: Session = Depends(get_db),
@@ -363,7 +364,10 @@ def list_masters(
 
 
 @router.get("/{master_id}", response_model=MasterPublicOut)
-def get_master(master_id: int, db: Session = Depends(get_db)):
+def get_master(
+    master_id: int = Path(..., le=MAX_DB_INT),
+    db: Session = Depends(get_db),
+):
     """Tasdiqlangan usta band bo'lsa ham ko'rinadi; tasdiqlanmagan/bloklangan -> 404."""
     profile = db.scalar(
         select(MasterProfile)
@@ -382,9 +386,9 @@ def get_master(master_id: int, db: Session = Depends(get_db)):
 
 @router.get("/{master_id}/reviews", response_model=MasterReviewsOut)
 def list_master_reviews(
-    master_id: int,
+    master_id: int = Path(..., le=MAX_DB_INT),
     limit: int = 20,
-    offset: int = 0,
+    offset: int = Query(default=0, le=MAX_DB_INT),
     db: Session = Depends(get_db),
 ):
     profile = db.scalar(
@@ -400,7 +404,7 @@ def list_master_reviews(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Usta topilmadi")
 
     limit = min(max(limit, 1), 100)
-    offset = max(offset, 0)
+    offset = min(max(offset, 0), MAX_DB_INT)
 
     rows = db.execute(
         select(Review, User.full_name)

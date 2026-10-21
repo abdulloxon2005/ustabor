@@ -11,6 +11,7 @@ from pydantic import (
     model_validator,
 )
 
+from app.core.config import MAX_DB_INT
 from app.models.enums import OrderStatus, PricingType
 from app.schemas.quote import QuoteOut
 
@@ -51,6 +52,13 @@ class ProfileUpdate(BaseModel):
     city: str | None = Field(default=None, min_length=1, max_length=80)
     district: str | None = Field(default=None, min_length=1, max_length=80)
 
+    @model_validator(mode="before")
+    @classmethod
+    def _non_empty_payload(cls, data):
+        if isinstance(data, dict) and not data:
+            raise ValueError("Kamida bitta maydon yuborilishi kerak")
+        return data
+
     @model_validator(mode="after")
     def _no_nulls(self):
         for f in self.model_fields_set:
@@ -75,7 +83,7 @@ class ProfileUpdate(BaseModel):
 
 
 class ServiceIn(BaseModel):
-    category_id: StrictInt
+    category_id: StrictInt = Field(le=MAX_DB_INT)
     pricing_type: Literal["fixed", "quote"]
     base_price: StrictInt | None = None
 

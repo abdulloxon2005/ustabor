@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
 from app import models
+from app.core.config import MAX_DB_INT
 from app.core.security import create_access_token, hash_password
 from app.main import app
 from app.models.enums import (
@@ -587,10 +588,6 @@ def test_all_body_endpoints_reject_invalid_inputs_with_4xx_and_create_nothing(
     assert not failures, f"Body validation failures: {failures}"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG: PATCH /masters/me and PATCH /admin/categories/{id} accept empty object {} with 200 instead of 422",
-)
 def test_patch_endpoints_reject_empty_object(vclient, val_env):
     """2a: Empty object {} sent to PATCH endpoints should return 4xx."""
     r1 = vclient.patch("/api/v1/masters/me", json={}, headers=val_env["headers"]["master"])
@@ -602,10 +599,6 @@ def test_patch_endpoints_reject_empty_object(vclient, val_env):
     assert 400 <= r1.status_code < 500 and 400 <= r2.status_code < 500
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG: UserStatusIn.is_active uses non-strict bool, accepting 'true' and 1 with 200 instead of 422",
-)
 def test_admin_user_status_rejects_non_strict_bool(vclient, val_env):
     """2a: Wrong types (string 'true' or int 1 for bool) on PATCH /admin/users/{id}/status should return 422."""
     u_id = val_env["customer_id"]
@@ -656,19 +649,14 @@ def test_unicode_emoji_and_sqli_strings_never_cause_500(vclient, db, val_env):
     [
         0,
         -1,
-        pytest.param(
-            99999999999999999999,
-            marks=pytest.mark.xfail(
-                strict=True,
-                reason="BUG: 64-bit integer overflow in SQLite raises unhandled OverflowError (HTTP 500) on path IDs > 2^63-1",
-            ),
-        ),
+        MAX_DB_INT + 1,
+        99999999999999999999,
         "abc",
         "1.5",
     ],
 )
 def test_path_ids_return_404_or_422_never_500(vclient, val_env, bad_id):
-    """2b: Path ids: 0, -1, 99999999999999999999, 'abc', '1.5' -> 404 or 422, never 500."""
+    """2b: Path ids: 0, -1, 2147483648, 99999999999999999999, 'abc', '1.5' -> 404 or 422, never 500."""
     h = val_env["headers"]
     m_id = val_env["master_profile_id"]
     o_id = val_env["order_assigned_id"]
@@ -737,6 +725,7 @@ def test_path_ids_return_404_or_422_never_500(vclient, val_env, bad_id):
             {"is_approved": True},
         ),
         ("GET", f"/api/v1/admin/orders/{bad_id}", h["admin"], None),
+        ("POST", f"/api/v1/admin/orders/{bad_id}/cancel", h["admin"], None),
         (
             "PATCH",
             f"/api/v1/admin/orders/{bad_id}/assign",
@@ -755,10 +744,26 @@ def test_path_ids_return_404_or_422_never_500(vclient, val_env, bad_id):
     for method, url, headers, body in cases:
         kw = {"json": body} if body is not None else {}
         r = vclient.request(method, url, headers=headers, **kw)
-        if r.status_code not in (404, 422):
+        if isinstance(bad_id, int) and bad_id > MAX_DB_INT:
+            if r.status_code != 422:
+                failures.append((method, url, r.status_code, r.text[:120]))
+        elif r.status_code not in (404, 422):
             failures.append((method, url, r.status_code, r.text[:120]))
 
     assert not failures, f"Path ID validation failures for {bad_id!r}: {failures}"
+
+
+def test_path_ids_accept_max_db_int_as_404_not_422(vclient, val_env):
+    """2b: 2147483647 (MAX_DB_INT) is accepted by path bound validation and returns 404 (not 422/500)."""
+    h = val_env["headers"]
+    max_id = MAX_DB_INT
+    for method, url, headers in [
+        ("GET", f"/api/v1/masters/{max_id}", h["public"]),
+        ("GET", f"/api/v1/orders/{max_id}", h["customer"]),
+        ("GET", f"/api/v1/admin/orders/{max_id}", h["admin"]),
+    ]:
+        r = vclient.request(method, url, headers=headers)
+        assert r.status_code == 404, f"{method} {url} -> {r.status_code}"
 
 
 # ==================== 2c. Query params ====================
@@ -846,28 +851,83 @@ def test_query_params_clamping_and_validation_never_500(vclient, val_env):
     )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG: Unclamped huge integer (> 2^63-1) in query params (offset, category_id, master_id) and body IDs raises SQLite OverflowError (500)",
-)
 def test_huge_int_overflow_in_query_params_and_body_ids_never_500(vclient, val_env):
-    """2c: Huge (> 64-bit) integers in offset/filter query params and body IDs must not cause 500."""
+    """2c: 2147483648 and 99999999999999999999 in offset/filter query params and body IDs are rejected with 422;
+    2147483647 (MAX_DB_INT) is accepted by the bound and never causes 500."""
     h = val_env["headers"]
-    huge = 99999999999999999999
     o_search = val_env["order_searching_id"]
 
-    responses = [
-        vclient.get(f"/api/v1/masters/{val_env['master_profile_id']}/reviews", params={"offset": huge}),
-        vclient.get("/api/v1/masters", params={"category_id": huge}),
-        vclient.get("/api/v1/orders", params={"offset": huge}, headers=h["customer"]),
-        vclient.get("/api/v1/admin/orders", params={"offset": huge}, headers=h["admin"]),
-        vclient.get("/api/v1/admin/orders", params={"category_id": huge}, headers=h["admin"]),
-        vclient.get("/api/v1/admin/orders", params={"master_id": huge}, headers=h["admin"]),
-        vclient.get("/api/v1/admin/users", params={"offset": huge}, headers=h["admin"]),
+    # 1. Rejected values (> MAX_DB_INT): 2147483648 and 99999999999999999999 -> 422
+    for rejected in (MAX_DB_INT + 1, 99999999999999999999):
+        responses = [
+            vclient.get(f"/api/v1/masters/{val_env['master_profile_id']}/reviews", params={"offset": rejected}),
+            vclient.get("/api/v1/masters", params={"category_id": rejected}),
+            vclient.get("/api/v1/orders", params={"offset": rejected}, headers=h["customer"]),
+            vclient.get("/api/v1/admin/orders", params={"offset": rejected}, headers=h["admin"]),
+            vclient.get("/api/v1/admin/orders", params={"category_id": rejected}, headers=h["admin"]),
+            vclient.get("/api/v1/admin/orders", params={"master_id": rejected}, headers=h["admin"]),
+            vclient.get("/api/v1/admin/users", params={"offset": rejected}, headers=h["admin"]),
+            vclient.get("/api/v1/admin/commissions", params={"offset": rejected}, headers=h["admin"]),
+            vclient.post(
+                "/api/v1/orders",
+                json={
+                    "category_id": rejected,
+                    "description": "Santexnika ishi",
+                    "city": "Toshkent",
+                    "district": "Chilonzor",
+                    "address": "1-uy",
+                    "selection_mode": "manual",
+                },
+                headers=h["customer"],
+            ),
+            vclient.post(
+                f"/api/v1/orders/{o_search}/select-master",
+                json={"master_id": rejected},
+                headers=h["customer"],
+            ),
+            vclient.put(
+                "/api/v1/masters/me/services",
+                json=[{"category_id": rejected, "pricing_type": "quote"}],
+                headers=h["master"],
+            ),
+            vclient.patch(
+                f"/api/v1/admin/orders/{o_search}/assign",
+                json={"master_id": rejected},
+                headers=h["admin"],
+            ),
+        ]
+        assert all(r.status_code == 422 for r in responses), [
+            (r.status_code, r.text[:80]) for r in responses
+        ]
+
+    # 2. Largest accepted value (MAX_DB_INT = 2147483647): query params return 200, body endpoints pass bound and return domain 404/422 (never 500)
+    max_ok = MAX_DB_INT
+    query_ok_responses = [
+        vclient.get(f"/api/v1/masters/{val_env['master_profile_id']}/reviews", params={"offset": max_ok}),
+        vclient.get("/api/v1/masters", params={"category_id": max_ok}),
+        vclient.get("/api/v1/orders", params={"offset": max_ok}, headers=h["customer"]),
+        vclient.get("/api/v1/admin/orders", params={"offset": max_ok}, headers=h["admin"]),
+        vclient.get("/api/v1/admin/orders", params={"category_id": max_ok}, headers=h["admin"]),
+        vclient.get("/api/v1/admin/orders", params={"master_id": max_ok}, headers=h["admin"]),
+        vclient.get("/api/v1/admin/users", params={"offset": max_ok}, headers=h["admin"]),
+        vclient.get("/api/v1/admin/commissions", params={"offset": max_ok}, headers=h["admin"]),
+    ]
+    assert all(r.status_code == 200 for r in query_ok_responses), [
+        r.status_code for r in query_ok_responses
+    ]
+
+    r_assign_max = vclient.patch(
+        f"/api/v1/admin/orders/{o_search}/assign",
+        json={"master_id": max_ok},
+        headers=h["admin"],
+    )
+    assert r_assign_max.status_code == 404  # passes schema bound, master not found in DB
+
+    for r_body_max in (
         vclient.post(
             "/api/v1/orders",
             json={
-                "category_id": huge,
+                "category_id": max_ok,
                 "description": "Santexnika ishi",
                 "city": "Toshkent",
                 "district": "Chilonzor",
@@ -878,21 +938,17 @@ def test_huge_int_overflow_in_query_params_and_body_ids_never_500(vclient, val_e
         ),
         vclient.post(
             f"/api/v1/orders/{o_search}/select-master",
-            json={"master_id": huge},
+            json={"master_id": max_ok},
             headers=h["customer"],
         ),
         vclient.put(
             "/api/v1/masters/me/services",
-            json=[{"category_id": huge, "pricing_type": "quote"}],
+            json=[{"category_id": max_ok, "pricing_type": "quote"}],
             headers=h["master"],
         ),
-        vclient.patch(
-            f"/api/v1/admin/orders/{o_search}/assign",
-            json={"master_id": huge},
-            headers=h["admin"],
-        ),
-    ]
-    assert all(r.status_code < 500 for r in responses), [r.status_code for r in responses]
+    ):
+        assert r_body_max.status_code == 422
+        assert isinstance(r_body_max.json().get("detail"), str)  # domain 422, not Pydantic bound error
 
 
 # ==================== 2d. Money and numbers ====================

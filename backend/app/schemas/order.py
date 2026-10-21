@@ -3,6 +3,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator
 
+from app.core.config import MAX_DB_INT
 from app.models.enums import OrderStatus, SelectionMode
 from app.schemas.quote import QuoteOut
 from app.schemas.review import OrderReviewOut
@@ -18,7 +19,7 @@ def _clean(v: str, label: str) -> str:
 class OrderCreate(BaseModel):
     """Himoyalangan maydonlar yo'q: status, master_id, agreed_price, commission_*."""
 
-    category_id: StrictInt
+    category_id: StrictInt = Field(le=MAX_DB_INT)
     description: str = Field(min_length=5, max_length=2000)
     city: str = Field(min_length=1, max_length=80)
     district: str = Field(min_length=1, max_length=80)
@@ -50,7 +51,7 @@ class OrderCreate(BaseModel):
 
 
 class SelectMasterIn(BaseModel):
-    master_id: StrictInt
+    master_id: StrictInt = Field(le=MAX_DB_INT)
 
 
 class HistoryOut(BaseModel):

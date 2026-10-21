@@ -2,6 +2,9 @@ from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# PostgreSQL 32-bit signed INTEGER maksimal qiymati (2^31 - 1)
+MAX_DB_INT: int = 2_147_483_647
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(

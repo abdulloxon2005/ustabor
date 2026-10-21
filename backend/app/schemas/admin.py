@@ -1,7 +1,8 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, StrictInt
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt
 
+from app.core.config import MAX_DB_INT
 from app.models.enums import (
     OrderStatus,
     PaymentMethod,
@@ -100,11 +101,11 @@ class AdminUserItem(BaseModel):
 
 
 class UserStatusIn(BaseModel):
-    is_active: bool
+    is_active: StrictBool
 
 
 class AdminAssignIn(BaseModel):
-    master_id: StrictInt
+    master_id: StrictInt = Field(le=MAX_DB_INT)
 
 
 class CommissionOrderItem(BaseModel):

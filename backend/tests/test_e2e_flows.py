@@ -507,10 +507,6 @@ def test_e2e_customer_cancel_paths_and_no_payment(client, admin_headers):
     assert r_c_comp.status_code in (403, 409)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG: Admin cannot cancel an in_progress order over HTTP (POST /orders/{id}/cancel is customer-only 403 and no /admin/orders/{id}/cancel route exists)",
-)
 def test_e2e_admin_can_cancel_in_progress_order(client, admin_headers):
     """3d (admin part): admin can cancel in_progress; no Payment exists for a cancelled order."""
     cat_id = _create_category_http(client, admin_headers)
@@ -544,14 +540,16 @@ def test_e2e_admin_can_cancel_in_progress_order(client, admin_headers):
     client.post(f"/api/v1/orders/{oid}/start", headers=m_headers)
 
     # Admin attempts to cancel via HTTP
+    admin_me = client.get("/api/v1/auth/me", headers=admin_headers).json()
     r_cancel = client.post(f"/api/v1/admin/orders/{oid}/cancel", headers=admin_headers)
-    if r_cancel.status_code in (404, 405):
-        r_cancel = client.post(f"/api/v1/orders/{oid}/cancel", headers=admin_headers)
-
     assert r_cancel.status_code == 200
+
     adm_det = client.get(f"/api/v1/admin/orders/{oid}", headers=admin_headers).json()
     assert adm_det["status"] == "cancelled"
     assert adm_det["payment"] is None
+    assert adm_det["history"][-1]["from_status"] == "in_progress"
+    assert adm_det["history"][-1]["to_status"] == "cancelled"
+    assert adm_det["history"][-1]["changed_by"] == admin_me["id"]
 
 
 # ==================== 3e. Visibility ====================

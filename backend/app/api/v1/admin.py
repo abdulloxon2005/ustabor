@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from app.api.deps import require_role
+from app.core.config import MAX_DB_INT
 from app.db.session import get_db
 from app.models import (
     Category,
@@ -30,6 +31,7 @@ from app.schemas.master import ApprovalIn, ApprovalOut
 from app.schemas.order import HistoryOut, OfferOut
 from app.schemas.quote import QuoteOut
 from app.services import admin_ops
+from app.services.order_flow import transition
 
 # Router darajasida: admindan boshqa hech kim kira olmaydi
 router = APIRouter(
@@ -42,7 +44,7 @@ SLUG_TAKEN = "Bu slug allaqachon mavjud"
 
 
 def _clamp_pagination(limit: int, offset: int) -> tuple[int, int]:
-    return min(max(limit, 1), 100), max(offset, 0)
+    return min(max(limit, 1), 100), min(max(offset, 0), MAX_DB_INT)
 
 
 def _admin_order_detail_out(order: Order, db: Session) -> AdminOrderDetailOut:
@@ -167,7 +169,11 @@ def create_category(data: CategoryCreate, db: Session = Depends(get_db)):
 
 
 @router.patch("/categories/{category_id}", response_model=CategoryOut)
-def update_category(category_id: int, data: CategoryUpdate, db: Session = Depends(get_db)):
+def update_category(
+    data: CategoryUpdate,
+    category_id: int = Path(..., le=MAX_DB_INT),
+    db: Session = Depends(get_db),
+):
     category = db.get(Category, category_id)
     if category is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Kategoriya topilmadi")
@@ -184,7 +190,11 @@ def update_category(category_id: int, data: CategoryUpdate, db: Session = Depend
 
 
 @router.patch("/masters/{profile_id}/approval", response_model=ApprovalOut)
-def set_master_approval(profile_id: int, data: ApprovalIn, db: Session = Depends(get_db)):
+def set_master_approval(
+    data: ApprovalIn,
+    profile_id: int = Path(..., le=MAX_DB_INT),
+    db: Session = Depends(get_db),
+):
     profile = db.get(MasterProfile, profile_id)
     if profile is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Usta topilmadi")
@@ -200,11 +210,11 @@ def set_master_approval(profile_id: int, data: ApprovalIn, db: Session = Depends
 @router.get("/orders", response_model=list[AdminOrderListItem])
 def list_admin_orders(
     status: OrderStatus | None = None,
-    category_id: int | None = None,
+    category_id: int | None = Query(default=None, le=MAX_DB_INT),
     city: str | None = None,
-    master_id: int | None = None,
+    master_id: int | None = Query(default=None, le=MAX_DB_INT),
     limit: int = 20,
-    offset: int = 0,
+    offset: int = Query(default=0, le=MAX_DB_INT),
     db: Session = Depends(get_db),
 ):
     limit, offset = _clamp_pagination(limit, offset)
@@ -261,7 +271,10 @@ def list_admin_orders(
 
 
 @router.get("/orders/{order_id}", response_model=AdminOrderDetailOut)
-def get_admin_order(order_id: int, db: Session = Depends(get_db)):
+def get_admin_order(
+    order_id: int = Path(..., le=MAX_DB_INT),
+    db: Session = Depends(get_db),
+):
     order = db.scalar(
         select(Order)
         .where(Order.id == order_id)
@@ -281,8 +294,8 @@ def get_admin_order(order_id: int, db: Session = Depends(get_db)):
 
 @router.patch("/orders/{order_id}/assign", response_model=AdminOrderDetailOut)
 def admin_assign_order(
-    order_id: int,
     data: AdminAssignIn,
+    order_id: int = Path(..., le=MAX_DB_INT),
     admin: User = Depends(require_role(Role.ADMIN)),
     db: Session = Depends(get_db),
 ):
@@ -309,6 +322,32 @@ def admin_assign_order(
     return _admin_order_detail_out(order, db)
 
 
+@router.post("/orders/{order_id}/cancel", response_model=AdminOrderDetailOut)
+def admin_cancel_order(
+    order_id: int = Path(..., le=MAX_DB_INT),
+    admin: User = Depends(require_role(Role.ADMIN)),
+    db: Session = Depends(get_db),
+):
+    order = db.get(Order, order_id)
+    if order is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Buyurtma topilmadi")
+    transition(db, order, OrderStatus.CANCELLED, actor=admin)
+    db.commit()
+    order = db.scalar(
+        select(Order)
+        .where(Order.id == order_id)
+        .options(
+            selectinload(Order.category),
+            selectinload(Order.customer),
+            selectinload(Order.master).selectinload(MasterProfile.user),
+            selectinload(Order.history),
+            selectinload(Order.offers),
+            selectinload(Order.quotes),
+        )
+    )
+    return _admin_order_detail_out(order, db)
+
+
 # ==================== Foydalanuvchi amallari ====================
 
 
@@ -318,7 +357,7 @@ def list_admin_users(
     is_active: bool | None = None,
     q: str | None = None,
     limit: int = 20,
-    offset: int = 0,
+    offset: int = Query(default=0, le=MAX_DB_INT),
     db: Session = Depends(get_db),
 ):
     limit, offset = _clamp_pagination(limit, offset)
@@ -364,8 +403,8 @@ def list_admin_users(
 
 @router.patch("/users/{user_id}/status", response_model=AdminUserItem)
 def update_user_status(
-    user_id: int,
     data: UserStatusIn,
+    user_id: int = Path(..., le=MAX_DB_INT),
     admin: User = Depends(require_role(Role.ADMIN)),
     db: Session = Depends(get_db),
 ):
@@ -402,7 +441,7 @@ def get_commissions_report(
     date_from: str | None = None,
     date_to: str | None = None,
     limit: int = 50,
-    offset: int = 0,
+    offset: int = Query(default=0, le=MAX_DB_INT),
     db: Session = Depends(get_db),
 ):
     limit, offset = _clamp_pagination(limit, offset)

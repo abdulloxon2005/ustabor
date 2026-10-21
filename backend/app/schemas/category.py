@@ -1,6 +1,6 @@
 import re
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator, model_validator
 
 SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 
@@ -50,7 +50,14 @@ class CategoryCreate(BaseModel):
 
 class CategoryUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=2, max_length=100)
-    is_active: bool | None = None
+    is_active: StrictBool | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _non_empty_payload(cls, data):
+        if isinstance(data, dict) and not data:
+            raise ValueError("Kamida bitta maydon yuborilishi kerak")
+        return data
 
     @field_validator("name")
     @classmethod
