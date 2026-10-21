@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#2563eb" />
+  <title>Profil - UstaBor</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <header class="app-header">
+    <a class="brand" href="index.html">UstaBor</a>
+    <button id="headerLogoutBtn" class="btn btn-outline" type="button">Chiqish</button>
+  </header>
+
+  <main class="container">
+    <h1>Profil</h1>
+
+    <div class="card">
+      <p style="margin: 0 0 8px;">
+        <span class="muted">Ism va familiya:</span><br />
+        <strong id="userName" style="font-size: 1.15rem;"></strong>
+      </p>
+      <p style="margin: 0 0 8px;">
+        <span class="muted">Telefon raqami:</span><br />
+        <strong id="userPhone"></strong>
+      </p>
+      <p style="margin: 0 0 16px;">
+        <span class="muted">Rol:</span><br />
+        <span class="badge">Mijoz</span>
+      </p>
+
+      <a class="btn btn-outline btn-block" href="my-orders.html" style="margin-bottom: 10px;">Buyurtmalarim</a>
+      <button id="logoutBtn" class="btn btn-danger btn-block" type="button">Chiqish</button>
+    </div>
+  </main>
+
+  <nav class="bottom-nav"></nav>
+
+  <script src="js/api.js"></script>
+  <script>
+    const user = requireAuth(["customer"]);
+    if (!user) throw new Error("redirect");
+
+    renderNav("profile");
+
+    document.getElementById("userName").textContent = user.full_name || "—";
+    document.getElementById("userPhone").textContent = user.phone || "—";
+
+    document.getElementById("headerLogoutBtn").addEventListener("click", () => logout());
+    document.getElementById("logoutBtn").addEventListener("click", () => logout());
+  </script>
+</body>
+</html>

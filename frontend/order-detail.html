@@ -70,6 +70,9 @@
   <main class="container">
     <h1 id="pageTitle">Buyurtma tafsilotlari</h1>
     <p id="state" class="muted" aria-live="polite">Yuklanmoqda...</p>
+    <div id="retryBox" style="display: none; margin-bottom: 12px;">
+      <button id="retryBtn" class="btn btn-outline" type="button">Qayta urinish</button>
+    </div>
 
     <div id="content" style="display: none;">
       <!-- Asosiy kartochka -->
@@ -109,22 +112,24 @@
     </div>
   </main>
 
-  <nav class="bottom-nav">
-    <a href="index.html"><span class="icon">🏠</span>Asosiy</a>
-    <a class="active" href="my-orders.html"><span class="icon">📋</span>Buyurtmalar</a>
-    <a href="login.html"><span class="icon">👤</span>Profil</a>
-  </nav>
+  <nav class="bottom-nav"></nav>
 
   <script src="js/api.js"></script>
   <script>
     const user = requireAuth(["customer"]);
     if (!user) throw new Error("redirect");
 
+    renderNav("orders");
+
     const params = new URLSearchParams(window.location.search);
     const orderId = params.get("id");
 
     const stateEl = document.getElementById("state");
+    const retryBoxEl = document.getElementById("retryBox");
+    const retryBtnEl = document.getElementById("retryBtn");
     const contentEl = document.getElementById("content");
+
+    retryBtnEl.addEventListener("click", () => loadOrder());
     const catNameEl = document.getElementById("catName");
     const statusBadgeEl = document.getElementById("statusBadge");
     const descEl = document.getElementById("desc");
@@ -404,6 +409,7 @@
         return;
       }
 
+      retryBoxEl.style.display = "none";
       stateEl.textContent = "Yuklanmoqda...";
       stateEl.className = "muted";
 
@@ -445,6 +451,7 @@
       } catch (err) {
         stateEl.textContent = err.message || "Buyurtma topilmadi";
         stateEl.className = "err";
+        retryBoxEl.style.display = "block";
         contentEl.style.display = "none";
       }
     }

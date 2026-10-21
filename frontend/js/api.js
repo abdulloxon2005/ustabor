@@ -62,6 +62,13 @@ const FIELD_LABELS = {
   password: "Parol",
   full_name: "Ism",
   role: "Rol",
+  bio: "Ma'lumot",
+  city: "Shahar",
+  district: "Tuman",
+  category_id: "Xizmat turi",
+  pricing_type: "Narxlash turi",
+  base_price: "Narx",
+  is_available: "Holat",
 };
 
 function formatValidationItem(item) {
@@ -124,7 +131,70 @@ async function apiFetch(path, options = {}) {
       clearSession();
       window.location.replace("login.html");
     }
-    throw new Error(formatError(data));
+    const err = new Error(formatError(data));
+    err.status = res.status;
+    throw err;
   }
   return data;
+}
+
+// ===== Umumiy navigatsiya =====
+function renderNav(activeKey) {
+  let nav = document.querySelector("nav.bottom-nav");
+  if (!nav) {
+    nav = document.createElement("nav");
+    nav.className = "bottom-nav";
+    document.body.appendChild(nav);
+  }
+  nav.replaceChildren();
+
+  const user = getToken() ? getUser() : null;
+  let items;
+
+  if (user && user.role === "master") {
+    items = [
+      { key: "dashboard", href: "master-dashboard.html", icon: "📋", label: "Takliflar" },
+      { key: "profile", href: "master-profile.html", icon: "👤", label: "Profil" },
+      { key: "logout", href: "login.html", icon: "🚪", label: "Chiqish", onClick: logout },
+    ];
+  } else if (user && user.role === "customer") {
+    items = [
+      { key: "home", href: "index.html", icon: "🏠", label: "Asosiy" },
+      { key: "orders", href: "my-orders.html", icon: "📋", label: "Buyurtmalar" },
+      { key: "profile", href: "profile.html", icon: "👤", label: "Profil" },
+    ];
+  } else if (user && user.role === "admin") {
+    items = [
+      { key: "home", href: "index.html", icon: "🏠", label: "Asosiy" },
+      { key: "admin", href: "admin.html", icon: "⚙️", label: "Admin" },
+      { key: "logout", href: "login.html", icon: "🚪", label: "Chiqish", onClick: logout },
+    ];
+  } else {
+    items = [
+      { key: "home", href: "index.html", icon: "🏠", label: "Asosiy" },
+      { key: "login", href: "login.html", icon: "🔑", label: "Kirish" },
+      { key: "register", href: "register.html", icon: "📝", label: "Ro'yxatdan o'tish" },
+    ];
+  }
+
+  items.forEach((item) => {
+    const a = document.createElement("a");
+    a.href = item.href;
+    if (item.key === activeKey) {
+      a.className = "active";
+    }
+    const iconSpan = document.createElement("span");
+    iconSpan.className = "icon";
+    iconSpan.textContent = item.icon;
+    const labelNode = document.createTextNode(item.label);
+    a.append(iconSpan, labelNode);
+
+    if (item.onClick) {
+      a.addEventListener("click", (e) => {
+        e.preventDefault();
+        item.onClick();
+      });
+    }
+    nav.appendChild(a);
+  });
 }

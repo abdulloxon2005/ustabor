@@ -16,22 +16,27 @@
   <main class="container">
     <h1>Buyurtmalarim</h1>
     <p id="state" class="muted" aria-live="polite">Yuklanmoqda...</p>
+    <div id="retry-box" style="display:none; margin-bottom:12px;">
+      <button id="retry-btn" class="btn btn-outline" type="button">Qayta urinish</button>
+    </div>
     <div id="list"></div>
   </main>
 
-  <nav class="bottom-nav">
-    <a href="index.html"><span class="icon">🏠</span>Asosiy</a>
-    <a class="active" href="my-orders.html"><span class="icon">📋</span>Buyurtmalar</a>
-    <a href="login.html"><span class="icon">👤</span>Profil</a>
-  </nav>
+  <nav class="bottom-nav"></nav>
 
   <script src="js/api.js"></script>
   <script>
     const user = requireAuth(["customer"]);
     if (!user) throw new Error("redirect");
 
+    renderNav("orders");
+
     const stateEl = document.getElementById("state");
+    const retryBoxEl = document.getElementById("retry-box");
+    const retryBtnEl = document.getElementById("retry-btn");
     const listEl = document.getElementById("list");
+
+    retryBtnEl.addEventListener("click", () => load());
 
     const orderNote = sessionStorage.getItem("order_note");
     if (orderNote) {
@@ -268,6 +273,7 @@
 
     async function load() {
       listEl.replaceChildren();
+      retryBoxEl.style.display = "none";
       stateEl.textContent = "Yuklanmoqda...";
       stateEl.className = "muted";
       try {
@@ -285,6 +291,7 @@
       } catch (e) {
         stateEl.textContent = "Xatolik: " + e.message;
         stateEl.className = "err";
+        retryBoxEl.style.display = "block";
       }
     }
 

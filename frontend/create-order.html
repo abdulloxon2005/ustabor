@@ -49,54 +49,72 @@
       </div>
 
       <div id="error" class="form-error" role="alert"></div>
+      <div id="catRetryBox" style="display:none; margin-bottom:12px;">
+        <button id="catRetryBtn" class="btn btn-outline" type="button">Qayta urinish</button>
+      </div>
       <button id="submit" class="btn btn-block btn-accent" type="submit">Buyurtma berish</button>
     </form>
   </main>
 
-  <nav class="bottom-nav">
-    <a href="index.html"><span class="icon">🏠</span>Asosiy</a>
-    <a href="my-orders.html"><span class="icon">📋</span>Buyurtmalar</a>
-    <a href="login.html"><span class="icon">👤</span>Profil</a>
-  </nav>
+  <nav class="bottom-nav"></nav>
 
   <script src="js/api.js"></script>
   <script>
     const user = requireAuth(["customer"]);
     if (!user) throw new Error("redirect");
 
+    renderNav("orders");
+
     const form = document.getElementById("form");
     const submit = document.getElementById("submit");
     const errorEl = document.getElementById("error");
+    const catRetryBox = document.getElementById("catRetryBox");
+    const catRetryBtn = document.getElementById("catRetryBtn");
     const catSelect = document.getElementById("category");
 
     // Kategoriyalarni yuklash
     const preselect = new URLSearchParams(window.location.search).get("category_id");
 
-    apiFetch("/categories")
-      .then((list) => {
-        catSelect.replaceChildren();
-        if (!list.length) {
+    function loadCategories() {
+      catRetryBox.style.display = "none";
+      errorEl.textContent = "";
+      catSelect.replaceChildren();
+      const loadingOpt = document.createElement("option");
+      loadingOpt.value = "";
+      loadingOpt.textContent = "Yuklanmoqda...";
+      catSelect.appendChild(loadingOpt);
+
+      apiFetch("/categories")
+        .then((list) => {
+          catSelect.replaceChildren();
+          if (!list.length) {
+            const o = document.createElement("option");
+            o.value = "";
+            o.textContent = "Xizmatlar mavjud emas";
+            catSelect.appendChild(o);
+            return;
+          }
+          list.forEach((c) => {
+            const o = document.createElement("option");
+            o.value = c.id;
+            o.textContent = c.name;
+            if (preselect && String(c.id) === preselect) o.selected = true;
+            catSelect.appendChild(o);
+          });
+        })
+        .catch((e) => {
+          catSelect.replaceChildren();
           const o = document.createElement("option");
           o.value = "";
-          o.textContent = "Xizmatlar mavjud emas";
+          o.textContent = "Yuklashda xatolik";
           catSelect.appendChild(o);
-          return;
-        }
-        list.forEach((c) => {
-          const o = document.createElement("option");
-          o.value = c.id;
-          o.textContent = c.name;
-          if (preselect && String(c.id) === preselect) o.selected = true;
-          catSelect.appendChild(o);
+          errorEl.textContent = "Xizmatlarni yuklashda xatolik: " + e.message;
+          catRetryBox.style.display = "block";
         });
-      })
-      .catch((e) => {
-        catSelect.replaceChildren();
-        const o = document.createElement("option");
-        o.value = "";
-        o.textContent = "Yuklashda xatolik";
-        catSelect.appendChild(o);
-      });
+    }
+
+    catRetryBtn.addEventListener("click", () => loadCategories());
+    loadCategories();
 
     form.addEventListener("submit", async (e) => {
       e.preventDefault();

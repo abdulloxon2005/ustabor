@@ -29,17 +29,18 @@
     </form>
 
     <p id="state" class="muted" aria-live="polite"></p>
+    <div id="retry-box" style="display:none; margin-bottom:12px;">
+      <button id="retry-btn" class="btn btn-outline" type="button">Qayta urinish</button>
+    </div>
     <div id="list"></div>
   </main>
 
-  <nav class="bottom-nav">
-    <a class="active" href="index.html"><span class="icon">🏠</span>Asosiy</a>
-    <a href="#"><span class="icon">📋</span>Buyurtmalar</a>
-    <a href="login.html"><span class="icon">👤</span>Profil</a>
-  </nav>
+  <nav class="bottom-nav"></nav>
 
   <script src="js/api.js"></script>
   <script>
+    renderNav("home");
+
     const params = new URLSearchParams(window.location.search);
     const rawCat = params.get("category_id");
     const categoryId = rawCat && /^\d+$/.test(rawCat) ? rawCat : null;
@@ -49,18 +50,23 @@
 
     const form = document.getElementById("filters");
     const stateEl = document.getElementById("state");
+    const retryBoxEl = document.getElementById("retry-box");
+    const retryBtnEl = document.getElementById("retry-btn");
     const listEl = document.getElementById("list");
     form.city.value = params.get("city") || "";
     form.district.value = params.get("district") || "";
 
+    retryBtnEl.addEventListener("click", () => load());
+
     // 150000 -> "150 000 so'm"
     function formatPrice(n) {
-      return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, " ") + " so'm";
+      return formatSom(n);
     }
 
     function setState(text, isError) {
       stateEl.textContent = text;
       stateEl.className = isError ? "err" : "muted";
+      retryBoxEl.style.display = isError ? "block" : "none";
     }
 
     function renderMaster(m) {

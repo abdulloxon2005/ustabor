@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#2563eb" />
+  <title>Usta profili - UstaBor</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <header class="app-header">
+    <a class="brand" href="master-dashboard.html">UstaBor</a>
+    <div class="header-actions">
+      <a class="btn btn-outline" href="master-dashboard.html">Takliflar</a>
+      <button id="headerLogoutBtn" class="btn btn-outline" type="button">Chiqish</button>
+    </div>
+  </header>
+
+  <main class="container">
+    <h1>Usta profili</h1>
+
+    <!-- Yuklanish holati -->
+    <p id="loadingState" class="muted" aria-live="polite">Yuklanmoqda...</p>
+
+    <!-- Xatolik holati -->
+    <div id="errorState" class="card" style="display: none;">
+      <p id="errorStateMsg" class="err" style="margin: 0 0 12px;"></p>
+      <button id="retryBtn" class="btn btn-outline" type="button">Qayta urinish</button>
+    </div>
+
+    <!-- a) Profil hali yaratilmagan holat -->
+    <section id="createProfileSection" style="display: none;">
+      <div class="status-banner pending">
+        Profil yaratilgandan so'ng, mijozlarga ko'rinishi uchun admin uni tasdiqlashi kerak.
+      </div>
+
+      <form id="createProfileForm" class="card" novalidate>
+        <h2 style="margin-top: 0;">Profilni yaratish</h2>
+
+        <label for="createCity">Shahar</label>
+        <input id="createCity" name="city" type="text" maxlength="80" placeholder="Toshkent" required />
+
+        <label for="createDistrict">Tuman</label>
+        <input id="createDistrict" name="district" type="text" maxlength="80" placeholder="Chilonzor" required />
+
+        <label for="createBio">O'zingiz va tajribangiz haqida</label>
+        <textarea id="createBio" name="bio" maxlength="1000" placeholder="Masalan: 7 yillik tajribaga ega usta..."></textarea>
+
+        <div id="createProfileError" class="form-error" role="alert"></div>
+        <div id="createProfileSuccess" class="form-success" aria-live="polite"></div>
+
+        <button id="createProfileBtn" class="btn btn-accent btn-block" type="submit">Profilni yaratish</button>
+      </form>
+    </section>
+
+    <!-- b) Profil mavjud holat -->
+    <section id="existingProfileSection" style="display: none;">
+      <!-- Tasdiqlash holati banneri -->
+      <div id="approvalBanner" class="status-banner" role="status"></div>
+
+      <!-- Bandlik (Bo'sh / Band) almashtirgichi -->
+      <div class="card">
+        <h2 style="margin-top: 0;">Ish holati</h2>
+        <p class="muted" style="margin: 0 0 10px;">
+          "Bo'sh" holatida mijozlar sizni ro'yxatda ko'radi va buyurtma yubora oladi.
+        </p>
+        <div class="segmented" role="radiogroup" aria-label="Ish holati">
+          <label>
+            <input id="availTrueRadio" type="radio" name="availability" value="true" />
+            <span>Bo'sh</span>
+          </label>
+          <label>
+            <input id="availFalseRadio" type="radio" name="availability" value="false" />
+            <span>Band</span>
+          </label>
+        </div>
+        <div id="availError" class="form-error" role="alert"></div>
+        <div id="availSuccess" class="form-success" aria-live="polite"></div>
+      </div>
+
+      <!-- Profil ma'lumotlarini tahrirlash formasi -->
+      <form id="editProfileForm" class="card" novalidate>
+        <h2 style="margin-top: 0;">Profil ma'lumotlari</h2>
+
+        <label for="editCity">Shahar</label>
+        <input id="editCity" name="city" type="text" maxlength="80" placeholder="Toshkent" required />
+
+        <label for="editDistrict">Tuman</label>
+        <input id="editDistrict" name="district" type="text" maxlength="80" placeholder="Chilonzor" required />
+
+        <label for="editBio">O'zingiz va tajribangiz haqida</label>
+        <textarea id="editBio" name="bio" maxlength="1000" placeholder="Tajribangiz va ish tartibingiz haqida..."></textarea>
+
+        <div id="editProfileError" class="form-error" role="alert"></div>
+        <div id="editProfileSuccess" class="form-success" aria-live="polite"></div>
+
+        <button id="editProfileBtn" class="btn btn-block" type="submit">Profilni saqlash</button>
+      </form>
+
+      <!-- Xizmatlar va narxlar bo'limi -->
+      <div class="card">
+        <h2 style="margin-top: 0;">Xizmatlar va narxlar</h2>
+        <p class="muted" style="margin: 0 0 12px;">
+          Ko'rsatadigan xizmatlaringizni belgilang va narxlash turini tanlang.
+        </p>
+
+        <div id="servicesEmpty" class="empty-state muted" style="display: none;">
+          Hozircha faol xizmat turlari yo'q
+        </div>
+
+        <div id="servicesList"></div>
+
+        <div id="servicesError" class="form-error" role="alert"></div>
+        <div id="servicesSuccess" class="form-success" aria-live="polite"></div>
+
+        <button id="saveServicesBtn" class="btn btn-accent btn-block" type="button" style="margin-top: 8px;">
+          Xizmatlarni saqlash
+        </button>
+      </div>
+    </section>
+  </main>
+
+  <nav class="bottom-nav"></nav>
+
+  <script src="js/api.js"></script>
+  <script>
+    const user = requireAuth(["master"]);
+    if (!user) throw new Error("redirect");
+
+    renderNav("profile");
+    document.getElementById("headerLogoutBtn").addEventListener("click", () => logout());
+
+    const loadingState = document.getElementById("loadingState");
+    const errorState = document.getElementById("errorState");
+    const errorStateMsg = document.getElementById("errorStateMsg");
+    const retryBtn = document.getElementById("retryBtn");
+
+    const createProfileSection = document.getElementById("createProfileSection");
+    const createProfileForm = document.getElementById("createProfileForm");
+    const createCity = document.getElementById("createCity");
+    const createDistrict = document.getElementById("createDistrict");
+    const createBio = document.getElementById("createBio");
+    const createProfileError = document.getElementById("createProfileError");
+    const createProfileSuccess = document.getElementById("createProfileSuccess");
+    const createProfileBtn = document.getElementById("createProfileBtn");
+
+    const existingProfileSection = document.getElementById("existingProfileSection");
+    const approvalBanner = document.getElementById("approvalBanner");
+
+    const availTrueRadio = document.getElementById("availTrueRadio");
+    const availFalseRadio = document.getElementById("availFalseRadio");
+    const availError = document.getElementById("availError");
+    const availSuccess = document.getElementById("availSuccess");
+
+    const editProfileForm = document.getElementById("editProfileForm");
+    const editCity = document.getElementById("editCity");
+    const editDistrict = document.getElementById("editDistrict");
+    const editBio = document.getElementById("editBio");
+    const editProfileError = document.getElementById("editProfileError");
+    const editProfileSuccess = document.getElementById("editProfileSuccess");
+    const editProfileBtn = document.getElementById("editProfileBtn");
+
+    const servicesEmpty = document.getElementById("servicesEmpty");
+    const servicesList = document.getElementById("servicesList");
+    const servicesError = document.getElementById("servicesError");
+    const servicesSuccess = document.getElementById("servicesSuccess");
+    const saveServicesBtn = document.getElementById("saveServicesBtn");
+
+    let categoriesData = [];
+    let currentProfile = null;
+    // Har bir kategoriya uchun DOM elementlar ro'yxati
+    let serviceRowRefs = [];
+
+    function updateApprovalBanner(profile) {
+      if (profile.is_approved) {
+        approvalBanner.className = "status-banner approved";
+        approvalBanner.textContent = "Tasdiqlangan";
+      } else {
+        approvalBanner.className = "status-banner pending";
+        approvalBanner.textContent = "Admin tasdiqlashini kutmoqda";
+      }
+    }
+
+    function renderServicesRows(categories, profileServices) {
+      servicesList.replaceChildren();
+      serviceRowRefs = [];
+
+      if (!categories || !categories.length) {
+        servicesEmpty.style.display = "block";
+        saveServicesBtn.style.display = "none";
+        return;
+      }
+
+      servicesEmpty.style.display = "none";
+      saveServicesBtn.style.display = "inline-flex";
+
+      const mapByCat = new Map();
+      (profileServices || []).forEach((s) => {
+        mapByCat.set(Number(s.category_id), s);
+      });
+
+      categories.forEach((cat) => {
+        const existing = mapByCat.get(Number(cat.id));
+
+        const row = document.createElement("div");
+        row.className = "service-row";
+
+        const titleRow = document.createElement("div");
+        titleRow.style.fontWeight = "700";
+        titleRow.style.fontSize = "1.05rem";
+        titleRow.style.marginBottom = "4px";
+        titleRow.textContent = cat.name;
+        row.appendChild(titleRow);
+
+        const checkLabel = document.createElement("label");
+        checkLabel.className = "service-check-label";
+
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.checked = Boolean(existing);
+
+        const checkSpan = document.createElement("span");
+        checkSpan.textContent = "Men bu xizmatni ko'rsataman";
+
+        checkLabel.append(checkbox, checkSpan);
+        row.appendChild(checkLabel);
+
+        const controls = document.createElement("div");
+        controls.className = "service-controls";
+
+        const selectWrap = document.createElement("div");
+        const selectLabel = document.createElement("label");
+        selectLabel.style.marginTop = "4px";
+        selectLabel.textContent = "Narxlash turi";
+
+        const select = document.createElement("select");
+        const optFixed = document.createElement("option");
+        optFixed.value = "fixed";
+        optFixed.textContent = "Qat'iy narx";
+
+        const optQuote = document.createElement("option");
+        optQuote.value = "quote";
+        optQuote.textContent = "Narx taklif qilaman";
+
+        select.append(optFixed, optQuote);
+        select.value = existing ? existing.pricing_type : "fixed";
+        selectWrap.append(selectLabel, select);
+
+        const priceWrap = document.createElement("div");
+        const priceLabel = document.createElement("label");
+        priceLabel.style.marginTop = "4px";
+        priceLabel.textContent = "Narx (so'm)";
+
+        const priceInput = document.createElement("input");
+        priceInput.type = "number";
+        priceInput.min = "1";
+        priceInput.step = "1";
+        priceInput.inputMode = "numeric";
+        priceInput.placeholder = "Masalan: 120000";
+        if (existing && existing.pricing_type === "fixed" && existing.base_price != null) {
+          priceInput.value = String(existing.base_price);
+        }
+
+        const priceHint = document.createElement("div");
+        priceHint.className = "muted";
+        priceHint.style.fontSize = "0.8rem";
+        priceHint.style.marginTop = "4px";
+
+        function updatePricePreview() {
+          const val = parseInt(priceInput.value, 10);
+          if (!isNaN(val) && val > 0) {
+            priceHint.textContent = "Ko'rinishi: " + formatSom(val);
+          } else {
+            priceHint.textContent = "";
+          }
+        }
+        priceInput.addEventListener("input", updatePricePreview);
+        updatePricePreview();
+
+        priceWrap.append(priceLabel, priceInput, priceHint);
+        controls.append(selectWrap, priceWrap);
+        row.appendChild(controls);
+
+        function syncVisibility() {
+          controls.style.display = checkbox.checked ? "grid" : "none";
+          priceWrap.style.display = select.value === "fixed" ? "block" : "none";
+        }
+
+        checkbox.addEventListener("change", () => {
+          servicesError.textContent = "";
+          servicesSuccess.textContent = "";
+          syncVisibility();
+        });
+
+        select.addEventListener("change", () => {
+          servicesError.textContent = "";
+          servicesSuccess.textContent = "";
+          syncVisibility();
+        });
+
+        syncVisibility();
+        servicesList.appendChild(row);
+
+        serviceRowRefs.push({
+          categoryId: Number(cat.id),
+          categoryName: cat.name,
+          checkbox,
+          select,
+          priceInput,
+        });
+      });
+    }
+
+    function renderProfileView(profile, categories) {
+      currentProfile = profile;
+      categoriesData = categories;
+
+      if (!profile) {
+        createProfileSection.style.display = "block";
+        existingProfileSection.style.display = "none";
+        return;
+      }
+
+      createProfileSection.style.display = "none";
+      existingProfileSection.style.display = "block";
+
+      updateApprovalBanner(profile);
+
+      availTrueRadio.checked = Boolean(profile.is_available);
+      availFalseRadio.checked = !profile.is_available;
+
+      editCity.value = profile.city || "";
+      editDistrict.value = profile.district || "";
+      editBio.value = profile.bio || "";
+
+      renderServicesRows(categories, profile.services || []);
+    }
+
+    async function loadPage() {
+      loadingState.style.display = "block";
+      errorState.style.display = "none";
+      createProfileSection.style.display = "none";
+      existingProfileSection.style.display = "none";
+
+      try {
+        const categoriesPromise = apiFetch("/categories");
+        const profilePromise = apiFetch("/masters/me").catch((err) => {
+          if (err && err.status === 404) {
+            return null;
+          }
+          throw err;
+        });
+
+        const [categories, profile] = await Promise.all([categoriesPromise, profilePromise]);
+        loadingState.style.display = "none";
+        renderProfileView(profile, categories || []);
+      } catch (err) {
+        loadingState.style.display = "none";
+        errorState.style.display = "block";
+        errorStateMsg.textContent = "Ma'lumotlarni yuklashda xatolik: " + err.message;
+      }
+    }
+
+    retryBtn.addEventListener("click", () => loadPage());
+
+    // a) Profil yaratish
+    createProfileForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      createProfileError.textContent = "";
+      createProfileSuccess.textContent = "";
+
+      const city = createCity.value.trim();
+      const district = createDistrict.value.trim();
+      const bio = createBio.value.trim();
+
+      if (!city) {
+        createProfileError.textContent = "Shaharni kiriting";
+        return;
+      }
+      if (!district) {
+        createProfileError.textContent = "Tumanni kiriting";
+        return;
+      }
+
+      createProfileBtn.disabled = true;
+      createProfileBtn.textContent = "Saqlanmoqda...";
+
+      try {
+        const created = await apiFetch("/masters/profile", {
+          method: "POST",
+          body: JSON.stringify({ city, district, bio }),
+        });
+        createProfileSuccess.textContent = "Saqlandi";
+        renderProfileView(created, categoriesData);
+        editProfileSuccess.textContent = "Saqlandi";
+      } catch (err) {
+        createProfileError.textContent = err.message;
+      } finally {
+        createProfileBtn.disabled = false;
+        createProfileBtn.textContent = "Profilni yaratish";
+      }
+    });
+
+    // b.1) Bandlik holatini darhol saqlash
+    async function handleAvailabilityChange(isAvailable) {
+      availError.textContent = "";
+      availSuccess.textContent = "";
+      availTrueRadio.disabled = true;
+      availFalseRadio.disabled = true;
+
+      try {
+        const updated = await apiFetch("/masters/me/availability", {
+          method: "PATCH",
+          body: JSON.stringify({ is_available: isAvailable }),
+        });
+        currentProfile = updated;
+        availTrueRadio.checked = Boolean(updated.is_available);
+        availFalseRadio.checked = !updated.is_available;
+        availSuccess.textContent = "Saqlandi";
+      } catch (err) {
+        availError.textContent = err.message;
+        if (currentProfile) {
+          availTrueRadio.checked = Boolean(currentProfile.is_available);
+          availFalseRadio.checked = !currentProfile.is_available;
+        }
+      } finally {
+        availTrueRadio.disabled = false;
+        availFalseRadio.disabled = false;
+      }
+    }
+
+    availTrueRadio.addEventListener("change", () => {
+      if (availTrueRadio.checked) handleAvailabilityChange(true);
+    });
+    availFalseRadio.addEventListener("change", () => {
+      if (availFalseRadio.checked) handleAvailabilityChange(false);
+    });
+
+    // b.2) Profil ma'lumotlarini yangilash
+    editProfileForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      editProfileError.textContent = "";
+      editProfileSuccess.textContent = "";
+
+      const city = editCity.value.trim();
+      const district = editDistrict.value.trim();
+      const bio = editBio.value.trim();
+
+      if (!city) {
+        editProfileError.textContent = "Shaharni kiriting";
+        return;
+      }
+      if (!district) {
+        editProfileError.textContent = "Tumanni kiriting";
+        return;
+      }
+
+      editProfileBtn.disabled = true;
+      editProfileBtn.textContent = "Saqlanmoqda...";
+
+      try {
+        const updated = await apiFetch("/masters/me", {
+          method: "PATCH",
+          body: JSON.stringify({ city, district, bio }),
+        });
+        currentProfile = updated;
+        updateApprovalBanner(updated);
+        editProfileSuccess.textContent = "Saqlandi";
+      } catch (err) {
+        editProfileError.textContent = err.message;
+      } finally {
+        editProfileBtn.disabled = false;
+        editProfileBtn.textContent = "Profilni saqlash";
+      }
+    });
+
+    // b.3) Xizmatlar va narxlarni saqlash
+    saveServicesBtn.addEventListener("click", async () => {
+      servicesError.textContent = "";
+      servicesSuccess.textContent = "";
+
+      const payload = [];
+      for (const ref of serviceRowRefs) {
+        if (!ref.checkbox.checked) continue;
+        const pricingType = ref.select.value;
+        let basePrice = null;
+
+        if (pricingType === "fixed") {
+          const rawVal = ref.priceInput.value.trim();
+          const parsed = Number(rawVal);
+          if (!rawVal || !Number.isInteger(parsed) || parsed <= 0) {
+            servicesError.textContent = ref.categoryName + ": qat'iy narx uchun 0 dan katta butun son kiriting";
+            ref.priceInput.focus();
+            return;
+          }
+          basePrice = parsed;
+        }
+
+        payload.push({
+          category_id: ref.categoryId,
+          pricing_type: pricingType,
+          base_price: basePrice,
+        });
+      }
+
+      if (payload.length === 0) {
+        servicesError.textContent = "Kamida bitta xizmatni tanlang";
+        return;
+      }
+
+      saveServicesBtn.disabled = true;
+      saveServicesBtn.textContent = "Saqlanmoqda...";
+
+      try {
+        const updated = await apiFetch("/masters/me/services", {
+          method: "PUT",
+          body: JSON.stringify(payload),
+        });
+        currentProfile = updated;
+        updateApprovalBanner(updated);
+        renderServicesRows(categoriesData, updated.services || []);
+        servicesSuccess.textContent = "Saqlandi";
+      } catch (err) {
+        servicesError.textContent = err.message;
+      } finally {
+        saveServicesBtn.disabled = false;
+        saveServicesBtn.textContent = "Xizmatlarni saqlash";
+      }
+    });
+
+    loadPage();
+  </script>
+</body>
+</html>

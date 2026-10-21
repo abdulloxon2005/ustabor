@@ -10,42 +10,57 @@
 <body>
   <header class="app-header">
     <span class="brand">UstaBor</span>
-    <a id="header-btn" class="btn btn-outline" href="login.html">Kirish</a>
+    <div id="header-actions" class="header-actions">
+      <a id="header-login" class="btn btn-outline" href="login.html">Kirish</a>
+      <a id="header-register" class="btn" href="register.html">Ro'yxatdan o'tish</a>
+    </div>
   </header>
 
   <main class="container">
     <section class="hero">
       <h1>Uyga usta chaqiring</h1>
       <p class="muted">Xizmat tanlang, buyurtma bering, usta toping.</p>
-      <a id="hero-btn" class="btn btn-accent" href="#categories">Buyurtma berish</a>
+      <a id="hero-btn" class="btn btn-accent" href="masters.html">Buyurtma berish</a>
     </section>
 
     <p id="status" class="muted">Server tekshirilmoqda...</p>
 
     <h2 id="categories">Xizmatlar</h2>
     <p id="cat-state" class="muted">Yuklanmoqda...</p>
+    <div id="cat-err-box" style="display:none; margin-bottom:12px;">
+      <button id="cat-retry-btn" class="btn btn-outline" type="button">Qayta urinish</button>
+    </div>
     <div class="grid" id="cat-grid"></div>
   </main>
 
-  <nav class="bottom-nav">
-    <a class="active" href="index.html"><span class="icon">🏠</span>Asosiy</a>
-    <a id="nav-orders" href="my-orders.html"><span class="icon">📋</span>Buyurtmalar</a>
-    <a id="nav-profile" href="login.html"><span class="icon">👤</span>Profil</a>
-  </nav>
+  <nav class="bottom-nav"></nav>
 
   <script src="js/api.js"></script>
   <script>
+    renderNav("home");
+
     // Foydalanuvchi kirganmi?
     const curUser = getUser();
-    const headerBtn = document.getElementById("header-btn");
+    const headerActions = document.getElementById("header-actions");
     const heroBtn = document.getElementById("hero-btn");
 
     if (curUser && getToken()) {
-      headerBtn.textContent = "Chiqish";
-      headerBtn.href = "#";
-      headerBtn.addEventListener("click", (e) => { e.preventDefault(); logout(); });
+      headerActions.replaceChildren();
+      const outBtn = document.createElement("button");
+      outBtn.type = "button";
+      outBtn.className = "btn btn-outline";
+      outBtn.textContent = "Chiqish";
+      outBtn.addEventListener("click", () => logout());
+      headerActions.appendChild(outBtn);
+
       if (curUser.role === "customer") {
         heroBtn.href = "create-order.html";
+      } else if (curUser.role === "master") {
+        heroBtn.href = "master-dashboard.html";
+        heroBtn.textContent = "Usta paneli";
+      } else if (curUser.role === "admin") {
+        heroBtn.href = "admin.html";
+        heroBtn.textContent = "Admin panel";
       }
     }
 
@@ -63,31 +78,46 @@
 
     // Kategoriyalar
     const catState = document.getElementById("cat-state");
+    const catErrBox = document.getElementById("cat-err-box");
+    const catRetryBtn = document.getElementById("cat-retry-btn");
     const catGrid = document.getElementById("cat-grid");
-    apiFetch("/categories")
-      .then((list) => {
-        if (!list.length) {
-          catState.textContent = "Hozircha xizmatlar yo'q";
-          return;
-        }
-        catState.hidden = true;
-        list.forEach((c) => {
-          const a = document.createElement("a");
-          a.className = "card category-card";
-          // Kirgan customer buyurtma sahifasiga, aks holda ustalar ro'yxatiga
-          if (curUser && curUser.role === "customer" && getToken()) {
-            a.href = "create-order.html?category_id=" + encodeURIComponent(c.id);
-          } else {
-            a.href = "masters.html?category_id=" + encodeURIComponent(c.id);
+
+    function loadCategories() {
+      catState.hidden = false;
+      catState.textContent = "Yuklanmoqda...";
+      catState.className = "muted";
+      catErrBox.style.display = "none";
+      catGrid.replaceChildren();
+
+      apiFetch("/categories")
+        .then((list) => {
+          if (!list.length) {
+            catState.textContent = "Hozircha xizmatlar yo'q";
+            return;
           }
-          a.textContent = c.name;
-          catGrid.appendChild(a);
+          catState.hidden = true;
+          list.forEach((c) => {
+            const a = document.createElement("a");
+            a.className = "card category-card";
+            // Kirgan customer buyurtma sahifasiga, aks holda ustalar ro'yxatiga
+            if (curUser && curUser.role === "customer" && getToken()) {
+              a.href = "create-order.html?category_id=" + encodeURIComponent(c.id);
+            } else {
+              a.href = "masters.html?category_id=" + encodeURIComponent(c.id);
+            }
+            a.textContent = c.name;
+            catGrid.appendChild(a);
+          });
+        })
+        .catch((e) => {
+          catState.textContent = "Xizmatlarni yuklab bo'lmadi: " + e.message;
+          catState.className = "err";
+          catErrBox.style.display = "block";
         });
-      })
-      .catch((e) => {
-        catState.textContent = "Xizmatlarni yuklab bo'lmadi: " + e.message;
-        catState.className = "err";
-      });
+    }
+
+    catRetryBtn.addEventListener("click", () => loadCategories());
+    loadCategories();
   </script>
 </body>
 </html>

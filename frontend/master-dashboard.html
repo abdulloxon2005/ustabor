@@ -10,16 +10,28 @@
 <body>
   <header class="app-header">
     <a class="brand" href="master-dashboard.html">UstaBor</a>
-    <button class="btn btn-outline" onclick="logout()" style="min-height:36px; padding:0 12px; font-size:0.85rem;">Chiqish</button>
+    <div class="header-actions">
+      <a class="btn btn-outline" href="master-profile.html">Profil</a>
+      <button id="headerLogoutBtn" class="btn btn-outline" type="button">Chiqish</button>
+    </div>
   </header>
 
   <main class="container">
-    <div id="no-profile-card" class="card" style="display:none; background:#fee2e2; border-color:#ef4444; color:#991b1b;">
-      <p style="margin:0; font-weight:600;">Usta profili topilmadi. Avval profil yarating</p>
-    </div>
-
     <h1>Usta paneli</h1>
     <p id="state" class="muted" aria-live="polite">Yuklanmoqda...</p>
+
+    <div id="error-box" class="card" style="display:none;">
+      <p id="error-msg" class="err" style="margin:0 0 12px;"></p>
+      <button id="retry-btn" class="btn btn-outline" type="button">Qayta urinish</button>
+    </div>
+
+    <div id="no-profile-card" class="card" style="display:none;">
+      <h2 style="margin-top:0;">Avval profilingizni yarating</h2>
+      <p class="muted" style="margin:0 0 12px;">
+        Buyurtma takliflarini qabul qilish uchun shahar, tuman va xizmatlaringizni kiriting.
+      </p>
+      <a class="btn btn-accent btn-block" href="master-profile.html">Profilni yaratish</a>
+    </div>
 
     <div id="content" style="display:none;">
       <!-- Daromadlar hisobi kartochkasi -->
@@ -57,21 +69,26 @@
     </div>
   </main>
 
-  <nav class="bottom-nav">
-    <a class="active" href="master-dashboard.html"><span class="icon">📋</span>Takliflar</a>
-    <a href="#" onclick="logout(); return false;"><span class="icon">🚪</span>Chiqish</a>
-  </nav>
+  <nav class="bottom-nav"></nav>
 
   <script src="js/api.js"></script>
   <script>
     const user = requireAuth(["master"]);
     if (!user) throw new Error("redirect");
 
+    renderNav("dashboard");
+    document.getElementById("headerLogoutBtn").addEventListener("click", () => logout());
+
     const stateEl = document.getElementById("state");
+    const errorBoxEl = document.getElementById("error-box");
+    const errorMsgEl = document.getElementById("error-msg");
+    const retryBtnEl = document.getElementById("retry-btn");
     const contentEl = document.getElementById("content");
     const noProfileEl = document.getElementById("no-profile-card");
     const offersListEl = document.getElementById("offers-list");
     const activeListEl = document.getElementById("active-list");
+
+    retryBtnEl.addEventListener("click", () => load());
 
     const earningsLoadingEl = document.getElementById("earnings-loading");
     const earningsErrorEl = document.getElementById("earnings-error");
@@ -278,7 +295,6 @@
 
           const submitBtn = document.createElement("button");
           submitBtn.className = "btn btn-accent btn-block";
-          submitBtn.style.minHeight = "40px";
           submitBtn.textContent = "Yuborish";
 
           submitBtn.addEventListener("click", async () => {
@@ -372,9 +388,24 @@
     async function load() {
       stateEl.textContent = "Yuklanmoqda...";
       stateEl.className = "muted";
+      errorBoxEl.style.display = "none";
       noProfileEl.style.display = "none";
+      contentEl.style.display = "none";
 
       try {
+        const profile = await apiFetch("/masters/me").catch((err) => {
+          if (err && (err.status === 404 || (err.message && err.message.toLowerCase().includes("profil")))) {
+            return null;
+          }
+          throw err;
+        });
+
+        if (!profile) {
+          stateEl.textContent = "";
+          noProfileEl.style.display = "block";
+          return;
+        }
+
         const [ordersData] = await Promise.all([
           apiFetch("/masters/me/orders"),
           loadEarnings(),
@@ -408,13 +439,8 @@
         }
       } catch (err) {
         stateEl.textContent = "";
-        if (err.message && err.message.toLowerCase().includes("profil")) {
-          noProfileEl.style.display = "block";
-          noProfileEl.textContent = "Usta profili topilmadi. Avval profil yarating";
-        } else {
-          stateEl.textContent = "Xatolik: " + err.message;
-          stateEl.className = "err";
-        }
+        errorBoxEl.style.display = "block";
+        errorMsgEl.textContent = "Xatolik: " + err.message;
       }
     }
 
