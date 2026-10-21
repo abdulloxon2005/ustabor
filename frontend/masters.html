@@ -19,13 +19,13 @@
     <form id="filters" class="filters" novalidate>
       <div>
         <label for="city">Shahar</label>
-        <input id="city" name="city" type="text" autocomplete="off" placeholder="Toshkent" />
+        <input id="city" name="city" type="text" autocomplete="address-level2" placeholder="Toshkent" />
       </div>
       <div>
         <label for="district">Tuman</label>
-        <input id="district" name="district" type="text" autocomplete="off" placeholder="Chilonzor" />
+        <input id="district" name="district" type="text" autocomplete="address-level3" placeholder="Chilonzor" />
       </div>
-      <button class="btn" type="submit">Qidirish</button>
+      <button id="searchBtn" class="btn" type="submit">Qidirish</button>
     </form>
 
     <p id="state" class="muted" aria-live="polite"></p>
@@ -46,9 +46,10 @@
     const categoryId = rawCat && /^\d+$/.test(rawCat) ? rawCat : null;
     const rawOrderId = params.get("order_id");
     const orderId = rawOrderId && /^\d+$/.test(rawOrderId) ? rawOrderId : null;
-    const user = getUser();
+    const user = getToken() ? getUser() : null;
 
     const form = document.getElementById("filters");
+    const searchBtn = document.getElementById("searchBtn");
     const stateEl = document.getElementById("state");
     const retryBoxEl = document.getElementById("retry-box");
     const retryBtnEl = document.getElementById("retry-btn");
@@ -57,11 +58,6 @@
     form.district.value = params.get("district") || "";
 
     retryBtnEl.addEventListener("click", () => load());
-
-    // 150000 -> "150 000 so'm"
-    function formatPrice(n) {
-      return formatSom(n);
-    }
 
     function setState(text, isError) {
       stateEl.textContent = text;
@@ -100,7 +96,6 @@
         card.appendChild(bio);
       }
 
-      // Tanlangan kategoriya xizmati birinchi, qolganlari keyin
       const services = m.services.slice().sort((a, b) =>
         (String(b.category_id) === categoryId) - (String(a.category_id) === categoryId));
       if (services.length) {
@@ -112,21 +107,19 @@
           const p = document.createElement("span");
           p.className = "price";
           p.textContent = s.pricing_type === "fixed" && s.base_price != null
-            ? formatPrice(s.base_price) : "Narx kelishiladi";
+            ? formatSom(s.base_price) : "Narx kelishiladi";
           li.append(n, p);
           ul.appendChild(li);
         });
         card.appendChild(ul);
       }
 
-      // Sharhlar bo'limi
       const reviewsSection = document.createElement("div");
       reviewsSection.style.marginTop = "10px";
 
       const reviewsToggle = document.createElement("button");
       reviewsToggle.type = "button";
       reviewsToggle.className = "btn btn-outline";
-      reviewsToggle.style.minHeight = "36px";
       reviewsToggle.style.padding = "0 12px";
       reviewsToggle.style.fontSize = "0.85rem";
       reviewsToggle.textContent = "Sharhlar (" + m.rating_count + ") ▼";
@@ -140,58 +133,90 @@
       reviewsList.style.borderRadius = "8px";
 
       let reviewsLoaded = false;
-      reviewsToggle.addEventListener("click", async () => {
+
+      async function fetchReviews() {
+        reviewsList.replaceChildren();
+        const loadingP = document.createElement("p");
+        loadingP.className = "muted";
+        loadingP.style.margin = "4px 0";
+        loadingP.textContent = "Sharhlar yuklanmoqda...";
+        reviewsList.appendChild(loadingP);
+
+        try {
+          const res = await apiFetch("/masters/" + m.id + "/reviews");
+          const items = res.reviews || res.items || [];
+          reviewsList.replaceChildren();
+          if (!items.length) {
+            const emptyP = document.createElement("p");
+            emptyP.className = "muted";
+            emptyP.style.margin = "4px 0";
+            emptyP.textContent = "Hali sharh yo'q";
+            reviewsList.appendChild(emptyP);
+          } else {
+            items.forEach((r) => {
+              const rCard = document.createElement("div");
+              rCard.style.padding = "6px 0";
+              rCard.style.borderBottom = "1px solid var(--border)";
+
+              const rHead = document.createElement("div");
+              rHead.className = "card-row";
+              rHead.style.fontSize = "0.85rem";
+
+              const rAuthor = document.createElement("strong");
+              rAuthor.textContent = r.customer_first_name;
+
+              const rMeta = document.createElement("span");
+              const rStars = document.createElement("span");
+              rStars.className = "rating";
+              rStars.textContent = "★ " + r.rating;
+              rMeta.appendChild(rStars);
+
+              if (r.created_at) {
+                const rDate = document.createElement("span");
+                rDate.className = "muted";
+                rDate.style.marginLeft = "8px";
+                rDate.textContent = formatDate(r.created_at);
+                rMeta.appendChild(rDate);
+              }
+
+              rHead.append(rAuthor, rMeta);
+              rCard.appendChild(rHead);
+
+              if (r.comment) {
+                const rComment = document.createElement("p");
+                rComment.style.margin = "4px 0 0";
+                rComment.style.fontSize = "0.85rem";
+                rComment.textContent = r.comment;
+                rCard.appendChild(rComment);
+              }
+
+              reviewsList.appendChild(rCard);
+            });
+          }
+          reviewsLoaded = true;
+        } catch (err) {
+          reviewsList.replaceChildren();
+          const errP = document.createElement("p");
+          errP.className = "err";
+          errP.style.margin = "0 0 8px";
+          errP.textContent = "Xatolik: " + err.message;
+
+          const revRetryBtn = document.createElement("button");
+          revRetryBtn.type = "button";
+          revRetryBtn.className = "btn btn-outline";
+          revRetryBtn.textContent = "Qayta urinish";
+          revRetryBtn.addEventListener("click", () => fetchReviews());
+
+          reviewsList.append(errP, revRetryBtn);
+        }
+      }
+
+      reviewsToggle.addEventListener("click", () => {
         if (reviewsList.style.display === "none") {
           reviewsList.style.display = "block";
           reviewsToggle.textContent = "Sharhlar ▲";
           if (!reviewsLoaded) {
-            reviewsList.textContent = "Sharhlar yuklanmoqda...";
-            try {
-              const res = await apiFetch("/masters/" + m.id + "/reviews");
-              const items = res.reviews || res.items || [];
-              reviewsList.replaceChildren();
-              if (!items.length) {
-                const emptyP = document.createElement("p");
-                emptyP.className = "muted";
-                emptyP.style.margin = "4px 0";
-                emptyP.textContent = "Hali sharh yo'q";
-                reviewsList.appendChild(emptyP);
-              } else {
-                items.forEach((r) => {
-                  const rCard = document.createElement("div");
-                  rCard.style.padding = "6px 0";
-                  rCard.style.borderBottom = "1px solid var(--border)";
-
-                  const rHead = document.createElement("div");
-                  rHead.style.display = "flex";
-                  rHead.style.justifyContent = "space-between";
-                  rHead.style.fontSize = "0.85rem";
-
-                  const rAuthor = document.createElement("strong");
-                  rAuthor.textContent = r.customer_first_name;
-
-                  const rStars = document.createElement("span");
-                  rStars.className = "rating";
-                  rStars.textContent = "★ " + r.rating;
-
-                  rHead.append(rAuthor, rStars);
-                  rCard.appendChild(rHead);
-
-                  if (r.comment) {
-                    const rComment = document.createElement("p");
-                    rComment.style.margin = "4px 0 0";
-                    rComment.style.fontSize = "0.85rem";
-                    rComment.textContent = r.comment;
-                    rCard.appendChild(rComment);
-                  }
-
-                  reviewsList.appendChild(rCard);
-                });
-              }
-              reviewsLoaded = true;
-            } catch (err) {
-              reviewsList.textContent = "Xatolik: " + err.message;
-            }
+            fetchReviews();
           }
         } else {
           reviewsList.style.display = "none";
@@ -204,10 +229,12 @@
 
       if (orderId && user && user.role === "customer") {
         const chooseBtn = document.createElement("button");
+        chooseBtn.type = "button";
         chooseBtn.className = "btn btn-block btn-accent";
         chooseBtn.style.marginTop = "12px";
         chooseBtn.textContent = "Tanlash";
         chooseBtn.addEventListener("click", async () => {
+          if (!confirm(m.full_name + " ustani ushbu buyurtma uchun tanlaysizmi?")) return;
           chooseBtn.disabled = true;
           chooseBtn.textContent = "Tanlanmoqda...";
           try {
@@ -237,6 +264,8 @@
       if (district) q.set("district", district);
 
       listEl.replaceChildren();
+      searchBtn.disabled = true;
+      retryBtnEl.disabled = true;
       setState("Yuklanmoqda...", false);
       try {
         const masters = await apiFetch("/masters" + (q.toString() ? "?" + q : ""));
@@ -252,10 +281,12 @@
         masters.forEach((m) => listEl.appendChild(renderMaster(m)));
       } catch (e) {
         setState("Xatolik: " + e.message, true);
+      } finally {
+        searchBtn.disabled = false;
+        retryBtnEl.disabled = false;
       }
     }
 
-    // Kategoriya nomini sarlavhaga qo'yamiz
     if (categoryId) {
       apiFetch("/categories").then((list) => {
         const c = list.find((x) => String(x.id) === categoryId);

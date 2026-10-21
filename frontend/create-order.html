@@ -10,13 +10,13 @@
 <body>
   <header class="app-header">
     <a class="brand" href="index.html">UstaBor</a>
+    <a class="btn btn-outline" href="my-orders.html">Buyurtmalarim</a>
   </header>
 
   <main class="container">
     <h1>Yangi buyurtma</h1>
 
     <form id="form" class="card" novalidate>
-
       <label for="category">Xizmat turi</label>
       <select id="category" name="category_id" required>
         <option value="">Yuklanmoqda...</option>
@@ -27,14 +27,16 @@
                 placeholder="Muammoni batafsil tavsiflang" required></textarea>
 
       <label for="city">Shahar</label>
-      <input id="city" name="city" type="text" maxlength="80" required />
+      <input id="city" name="city" type="text" autocomplete="address-level2"
+             placeholder="Toshkent" maxlength="80" required />
 
       <label for="district">Tuman</label>
-      <input id="district" name="district" type="text" maxlength="80" required />
+      <input id="district" name="district" type="text" autocomplete="address-level3"
+             placeholder="Chilonzor" maxlength="80" required />
 
       <label for="address">Manzil</label>
-      <input id="address" name="address" type="text" maxlength="255"
-             placeholder="Ko'cha, uy raqami" required />
+      <input id="address" name="address" type="text" autocomplete="street-address"
+             maxlength="255" placeholder="Ko'cha, uy raqami" required />
 
       <label id="mode-label">Usta tanlash usuli</label>
       <div class="segmented" role="radiogroup" aria-labelledby="mode-label">
@@ -60,105 +62,119 @@
 
   <script src="js/api.js"></script>
   <script>
-    const user = requireAuth(["customer"]);
-    if (!user) throw new Error("redirect");
+    (() => {
+      const user = requireAuth(["customer"]);
+      if (!user) return;
 
-    renderNav("orders");
+      renderNav("orders");
 
-    const form = document.getElementById("form");
-    const submit = document.getElementById("submit");
-    const errorEl = document.getElementById("error");
-    const catRetryBox = document.getElementById("catRetryBox");
-    const catRetryBtn = document.getElementById("catRetryBtn");
-    const catSelect = document.getElementById("category");
+      const form = document.getElementById("form");
+      const submit = document.getElementById("submit");
+      const errorEl = document.getElementById("error");
+      const catRetryBox = document.getElementById("catRetryBox");
+      const catRetryBtn = document.getElementById("catRetryBtn");
+      const catSelect = document.getElementById("category");
 
-    // Kategoriyalarni yuklash
-    const preselect = new URLSearchParams(window.location.search).get("category_id");
+      const preselect = new URLSearchParams(window.location.search).get("category_id");
 
-    function loadCategories() {
-      catRetryBox.style.display = "none";
-      errorEl.textContent = "";
-      catSelect.replaceChildren();
-      const loadingOpt = document.createElement("option");
-      loadingOpt.value = "";
-      loadingOpt.textContent = "Yuklanmoqda...";
-      catSelect.appendChild(loadingOpt);
+      function loadCategories() {
+        catRetryBox.style.display = "none";
+        catRetryBtn.disabled = true;
+        catSelect.disabled = true;
+        errorEl.textContent = "";
+        catSelect.replaceChildren();
+        const loadingOpt = document.createElement("option");
+        loadingOpt.value = "";
+        loadingOpt.textContent = "Yuklanmoqda...";
+        catSelect.appendChild(loadingOpt);
 
-      apiFetch("/categories")
-        .then((list) => {
-          catSelect.replaceChildren();
-          if (!list.length) {
+        apiFetch("/categories")
+          .then((list) => {
+            catRetryBtn.disabled = false;
+            catSelect.replaceChildren();
+            if (!list.length) {
+              const o = document.createElement("option");
+              o.value = "";
+              o.textContent = "Hozircha xizmatlar yo'q";
+              catSelect.appendChild(o);
+              return;
+            }
+            catSelect.disabled = false;
+            list.forEach((c) => {
+              const o = document.createElement("option");
+              o.value = c.id;
+              o.textContent = c.name;
+              if (preselect && String(c.id) === preselect) o.selected = true;
+              catSelect.appendChild(o);
+            });
+          })
+          .catch((e) => {
+            catRetryBtn.disabled = false;
+            if (e.status === 403) {
+              renderForbidden(e.message);
+              return;
+            }
+            catSelect.replaceChildren();
             const o = document.createElement("option");
             o.value = "";
-            o.textContent = "Xizmatlar mavjud emas";
+            o.textContent = "Yuklashda xatolik";
             catSelect.appendChild(o);
+            errorEl.textContent = "Xizmatlarni yuklashda xatolik: " + e.message;
+            catRetryBox.style.display = "block";
+          });
+      }
+
+      catRetryBtn.addEventListener("click", () => loadCategories());
+      loadCategories();
+
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        errorEl.textContent = "";
+
+        const payload = {
+          category_id: Number(catSelect.value),
+          description: form.description.value.trim(),
+          city: form.city.value.trim(),
+          district: form.district.value.trim(),
+          address: form.address.value.trim(),
+          selection_mode: form.selection_mode.value,
+        };
+
+        if (!payload.category_id) { errorEl.textContent = "Xizmat turini tanlang"; return; }
+        if (payload.description.length < 5) { errorEl.textContent = "Tavsif kamida 5 ta belgidan iborat bo'lishi kerak"; return; }
+        if (!payload.city) { errorEl.textContent = "Shaharni kiriting"; return; }
+        if (!payload.district) { errorEl.textContent = "Tumanni kiriting"; return; }
+        if (!payload.address) { errorEl.textContent = "Manzilni kiriting"; return; }
+
+        submit.disabled = true;
+        submit.textContent = "Yuborilmoqda...";
+        try {
+          const res = await apiFetch("/orders", { method: "POST", body: JSON.stringify(payload) });
+          if (payload.selection_mode === "manual") {
+            const q = new URLSearchParams({
+              category_id: payload.category_id,
+              city: payload.city,
+              district: payload.district,
+              order_id: res.id,
+            });
+            window.location.replace("masters.html?" + q.toString());
+          } else {
+            if (res.note) {
+              sessionStorage.setItem("order_note", res.note);
+            }
+            window.location.replace("my-orders.html");
+          }
+        } catch (err) {
+          if (err.status === 403) {
+            renderForbidden(err.message);
             return;
           }
-          list.forEach((c) => {
-            const o = document.createElement("option");
-            o.value = c.id;
-            o.textContent = c.name;
-            if (preselect && String(c.id) === preselect) o.selected = true;
-            catSelect.appendChild(o);
-          });
-        })
-        .catch((e) => {
-          catSelect.replaceChildren();
-          const o = document.createElement("option");
-          o.value = "";
-          o.textContent = "Yuklashda xatolik";
-          catSelect.appendChild(o);
-          errorEl.textContent = "Xizmatlarni yuklashda xatolik: " + e.message;
-          catRetryBox.style.display = "block";
-        });
-    }
-
-    catRetryBtn.addEventListener("click", () => loadCategories());
-    loadCategories();
-
-    form.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      errorEl.textContent = "";
-
-      const payload = {
-        category_id: Number(catSelect.value),
-        description: form.description.value.trim(),
-        city: form.city.value.trim(),
-        district: form.district.value.trim(),
-        address: form.address.value.trim(),
-        selection_mode: form.selection_mode.value,
-      };
-
-      if (!payload.category_id) { errorEl.textContent = "Xizmat turini tanlang"; return; }
-      if (payload.description.length < 5) { errorEl.textContent = "Tavsif kamida 5 ta belgidan iborat bo'lishi kerak"; return; }
-      if (!payload.city) { errorEl.textContent = "Shaharni kiriting"; return; }
-      if (!payload.district) { errorEl.textContent = "Tumanni kiriting"; return; }
-      if (!payload.address) { errorEl.textContent = "Manzilni kiriting"; return; }
-
-      submit.disabled = true;
-      submit.textContent = "Yuborilmoqda...";
-      try {
-        const res = await apiFetch("/orders", { method: "POST", body: JSON.stringify(payload) });
-        if (payload.selection_mode === "manual") {
-          const q = new URLSearchParams({
-            category_id: payload.category_id,
-            city: payload.city,
-            district: payload.district,
-            order_id: res.id,
-          });
-          window.location.replace("masters.html?" + q.toString());
-        } else {
-          if (res.note) {
-            sessionStorage.setItem("order_note", res.note);
-          }
-          window.location.replace("my-orders.html");
+          errorEl.textContent = err.message;
+          submit.disabled = false;
+          submit.textContent = "Buyurtma berish";
         }
-      } catch (err) {
-        errorEl.textContent = err.message;
-        submit.disabled = false;
-        submit.textContent = "Buyurtma berish";
-      }
-    });
+      });
+    })();
   </script>
 </body>
 </html>

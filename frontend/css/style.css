@@ -26,12 +26,17 @@ body {
   background: var(--bg);
   color: var(--text);
   line-height: 1.5;
+  overflow-x: hidden;
   /* pastki menyu kontentni yopib qo'ymasligi uchun */
   padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom));
 }
 
 img { max-width: 100%; height: auto; }
 a { color: var(--primary); text-decoration: none; }
+a:focus-visible, button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
 
 /* ===== Tepa panel ===== */
 .app-header {
@@ -42,11 +47,29 @@ a { color: var(--primary); text-decoration: none; }
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
   padding: 12px 16px;
   background: var(--card);
   border-bottom: 1px solid var(--border);
 }
-.brand { font-weight: 700; font-size: 1.25rem; color: var(--primary); }
+.brand {
+  font-weight: 700;
+  font-size: 1.25rem;
+  color: var(--primary);
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+}
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.header-actions .btn {
+  padding: 0 12px;
+  font-size: 0.9rem;
+}
 
 /* ===== Asosiy kontent ===== */
 .container {
@@ -56,8 +79,8 @@ a { color: var(--primary); text-decoration: none; }
   margin: 0 auto;
   padding: 16px;
 }
-h1 { font-size: 1.5rem; margin: 0 0 8px; }
-h2 { font-size: 1.15rem; margin: 24px 0 12px; }
+h1 { font-size: 1.5rem; margin: 0 0 8px; overflow-wrap: anywhere; }
+h2 { font-size: 1.15rem; margin: 24px 0 12px; overflow-wrap: anywhere; }
 .muted { color: var(--muted); font-size: 0.9rem; }
 .ok { color: var(--ok); }
 .err { color: var(--err); }
@@ -77,6 +100,7 @@ h2 { font-size: 1.15rem; margin: 24px 0 12px; }
 }
 .bottom-nav a {
   flex: 1;
+  min-height: 44px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -95,8 +119,15 @@ h2 { font-size: 1.15rem; margin: 24px 0 12px; }
   border-radius: var(--radius);
   padding: 16px;
   margin-bottom: 12px;
+  overflow-wrap: anywhere;
 }
-.card-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.card-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
 
 .grid { display: grid; gap: 12px; grid-template-columns: repeat(2, 1fr); }
 
@@ -121,6 +152,7 @@ h2 { font-size: 1.15rem; margin: 24px 0 12px; }
   font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
+  text-align: center;
 }
 .btn:hover { background: var(--primary-dark); }
 .btn:disabled { opacity: 0.6; cursor: not-allowed; }
@@ -147,6 +179,12 @@ input:focus, select:focus, textarea:focus {
   border-color: transparent;
 }
 .form-error { color: var(--err); margin-top: 12px; min-height: 1.2em; }
+.form-success {
+  color: var(--ok);
+  font-weight: 600;
+  margin-top: 10px;
+  min-height: 1.2em;
+}
 
 /* ===== Holat belgilari ===== */
 .badge {
@@ -167,7 +205,12 @@ input:focus, select:focus, textarea:focus {
 /* ===== Jadval (admin) ===== */
 .table-wrap { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; background: var(--card); }
-th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+th, td {
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  overflow-wrap: anywhere;
+}
 th { font-size: 0.85rem; color: var(--muted); }
 
 /* Telefonda jadval qatori kartochkaga aylanadi.
@@ -180,11 +223,14 @@ th { font-size: 0.85rem; color: var(--muted); }
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: 6px 0;
+    background: var(--card);
   }
   table.stack td {
     display: flex;
     justify-content: space-between;
-    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px 12px;
     border: 0;
     padding: 6px 12px;
   }
@@ -192,6 +238,8 @@ th { font-size: 0.85rem; color: var(--muted); }
     content: attr(data-label);
     color: var(--muted);
     font-size: 0.85rem;
+    font-weight: 600;
+    flex-shrink: 0;
   }
 }
 
@@ -220,13 +268,19 @@ th { font-size: 0.85rem; color: var(--muted); }
   .grid { grid-template-columns: repeat(4, 1fr); }
 }
 
-
 /* ===== Kirish / ro'yxatdan o'tish sahifalari ===== */
 body.auth-page { padding-bottom: 0; }
 .auth-card { max-width: 420px; margin: 16px auto; }
 .auth-card h1 { text-align: center; margin-bottom: 4px; }
 .auth-card .muted { text-align: center; margin: 0 0 8px; }
 .auth-switch { text-align: center; margin-top: 16px; }
+.auth-switch a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 6px;
+  font-weight: 600;
+}
 
 /* Mijoz / Usta almashtirgich */
 .segmented { display: flex; gap: 8px; margin-top: 6px; }
@@ -249,6 +303,8 @@ body.auth-page { padding-bottom: 0; }
   align-items: center;
   justify-content: center;
   min-height: 44px;
+  padding: 4px 8px;
+  text-align: center;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: #fff;
@@ -260,7 +316,6 @@ body.auth-page { padding-bottom: 0; }
   color: #fff;
 }
 .segmented input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
-
 
 /* ===== Kategoriya va usta kartochkalari ===== */
 .category-card {
@@ -282,34 +337,78 @@ body.auth-page { padding-bottom: 0; }
 
 .master-card h3 { margin: 0; font-size: 1.05rem; overflow-wrap: anywhere; }
 .master-card ul { list-style: none; margin: 10px 0 0; padding: 0; }
-.master-card li { display: flex; justify-content: space-between; gap: 8px; padding: 4px 0; }
+.master-card li { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding: 4px 0; }
 .master-card .price { font-weight: 600; white-space: nowrap; }
 .rating { color: #b45309; font-weight: 600; white-space: nowrap; }
 .empty-state { text-align: center; padding: 32px 16px; }
 
-
-/* ===== Buyurtma kartochkalari ===== */
+/* ===== Buyurtma kartochkalari va tafsilotlari ===== */
 .order-card strong { overflow-wrap: anywhere; }
 .order-card .btn-danger { font-size: 0.9rem; min-height: 44px; }
 
-/* ===== Umumiy navigatsiya va usta profili ===== */
-.app-header {
-  flex-wrap: wrap;
-  gap: 8px;
+.timeline {
+  position: relative;
+  margin: 16px 0;
+  padding-left: 20px;
+  border-left: 2px solid var(--border);
 }
-.header-actions {
+.timeline-item {
+  position: relative;
+  margin-bottom: 16px;
+}
+.timeline-item:last-child {
+  margin-bottom: 0;
+}
+.timeline-dot {
+  position: absolute;
+  left: -27px;
+  top: 4px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--primary);
+  border: 2px solid #fff;
+}
+.star-rating {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  gap: 6px;
+  margin: 8px 0;
 }
-.header-actions .btn {
-  padding: 0 12px;
-  font-size: 0.9rem;
-}
-.bottom-nav a {
+.star-rating button {
+  min-width: 44px;
   min-height: 44px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+  font-size: 1.5rem;
+  color: #d1d5db;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, border-color 0.15s;
+}
+.star-rating button.active {
+  color: #f59e0b;
+  border-color: #f59e0b;
+}
+.quote-box {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin: 12px 0;
+}
+.review-box {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 12px;
+  padding: 14px;
+  margin-top: 16px;
 }
 
+/* ===== Usta profili ===== */
 .status-banner {
   border-radius: var(--radius);
   padding: 12px 16px;
@@ -326,13 +425,6 @@ body.auth-page { padding-bottom: 0; }
   background: #fef3c7;
   border-color: #fcd34d;
   color: #92400e;
-}
-
-.form-success {
-  color: var(--ok);
-  font-weight: 600;
-  margin-top: 10px;
-  min-height: 1.2em;
 }
 
 .service-row {
@@ -370,4 +462,83 @@ body.auth-page { padding-bottom: 0; }
     grid-template-columns: 1fr 1fr;
     align-items: end;
   }
+}
+
+/* ===== Admin paneli ===== */
+.tab-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 16px 0;
+}
+.tab-btn {
+  flex: 1 1 auto;
+  min-height: 44px;
+  padding: 8px 10px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  background: var(--card);
+  border-radius: 12px;
+  cursor: pointer;
+  text-align: center;
+  font-size: 0.9rem;
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.tab-btn.active {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.modal-content {
+  background: #fff;
+  border-radius: var(--radius);
+  max-width: 500px;
+  width: 100%;
+  max-height: 85vh;
+  overflow-y: auto;
+  padding: 20px;
+}
+.summary-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 1fr;
+  margin-bottom: 16px;
+}
+@media (min-width: 600px) {
+  .summary-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+.stat-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  text-align: center;
+}
+.stat-card .val {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--primary);
+  margin-top: 6px;
+}
+.pagination-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 14px;
+  gap: 12px;
 }

@@ -16,7 +16,12 @@
   <main class="container">
     <h1>Profil</h1>
 
-    <div class="card">
+    <p id="state" class="muted" aria-live="polite">Yuklanmoqda...</p>
+    <div id="retryBox" style="display: none; margin-bottom: 12px;">
+      <button id="retryBtn" class="btn btn-outline" type="button">Qayta urinish</button>
+    </div>
+
+    <div id="profileCard" class="card" style="display: none;">
       <p style="margin: 0 0 8px;">
         <span class="muted">Ism va familiya:</span><br />
         <strong id="userName" style="font-size: 1.15rem;"></strong>
@@ -27,7 +32,7 @@
       </p>
       <p style="margin: 0 0 16px;">
         <span class="muted">Rol:</span><br />
-        <span class="badge">Mijoz</span>
+        <span id="userRole" class="badge">Mijoz</span>
       </p>
 
       <a class="btn btn-outline btn-block" href="my-orders.html" style="margin-bottom: 10px;">Buyurtmalarim</a>
@@ -39,16 +44,60 @@
 
   <script src="js/api.js"></script>
   <script>
-    const user = requireAuth(["customer"]);
-    if (!user) throw new Error("redirect");
+    (() => {
+      const user = requireAuth(["customer"]);
+      if (!user) return;
 
-    renderNav("profile");
+      renderNav("profile");
 
-    document.getElementById("userName").textContent = user.full_name || "—";
-    document.getElementById("userPhone").textContent = user.phone || "—";
+      const stateEl = document.getElementById("state");
+      const retryBoxEl = document.getElementById("retryBox");
+      const retryBtnEl = document.getElementById("retryBtn");
+      const profileCardEl = document.getElementById("profileCard");
+      const userNameEl = document.getElementById("userName");
+      const userPhoneEl = document.getElementById("userPhone");
+      const userRoleEl = document.getElementById("userRole");
 
-    document.getElementById("headerLogoutBtn").addEventListener("click", () => logout());
-    document.getElementById("logoutBtn").addEventListener("click", () => logout());
+      function fillUser(u) {
+        userNameEl.textContent = u.full_name || "—";
+        userPhoneEl.textContent = u.phone || "—";
+        userRoleEl.textContent = formatRole(u.role || "customer");
+      }
+
+      async function loadProfile() {
+        retryBoxEl.style.display = "none";
+        retryBtnEl.disabled = true;
+        stateEl.textContent = "Yuklanmoqda...";
+        stateEl.className = "muted";
+
+        fillUser(user);
+
+        try {
+          const fresh = await apiFetch("/auth/me");
+          retryBtnEl.disabled = false;
+          saveSession(getToken(), fresh);
+          fillUser(fresh);
+          stateEl.textContent = "";
+          profileCardEl.style.display = "block";
+        } catch (err) {
+          retryBtnEl.disabled = false;
+          if (err.status === 403) {
+            renderForbidden(err.message);
+            return;
+          }
+          stateEl.textContent = "Xatolik: " + err.message;
+          stateEl.className = "err";
+          retryBoxEl.style.display = "block";
+          profileCardEl.style.display = "block";
+        }
+      }
+
+      retryBtnEl.addEventListener("click", () => loadProfile());
+      document.getElementById("headerLogoutBtn").addEventListener("click", () => logout());
+      document.getElementById("logoutBtn").addEventListener("click", () => logout());
+
+      loadProfile();
+    })();
   </script>
 </body>
 </html>

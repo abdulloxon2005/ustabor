@@ -6,60 +6,6 @@
   <meta name="theme-color" content="#2563eb" />
   <title>Buyurtma tafsilotlari - UstaBor</title>
   <link rel="stylesheet" href="css/style.css" />
-  <style>
-    .timeline {
-      position: relative;
-      margin: 16px 0;
-      padding-left: 20px;
-      border-left: 2px solid var(--border);
-    }
-    .timeline-item {
-      position: relative;
-      margin-bottom: 16px;
-    }
-    .timeline-item:last-child {
-      margin-bottom: 0;
-    }
-    .timeline-dot {
-      position: absolute;
-      left: -27px;
-      top: 4px;
-      width: 12px;
-      height: 12px;
-      border-radius: 50%;
-      background: var(--primary);
-      border: 2px solid #fff;
-    }
-    .star-rating {
-      display: flex;
-      gap: 8px;
-      font-size: 1.6rem;
-      margin: 8px 0;
-      cursor: pointer;
-    }
-    .star-rating span {
-      color: #d1d5db;
-      user-select: none;
-      transition: color 0.15s;
-    }
-    .star-rating span.active {
-      color: #f59e0b;
-    }
-    .quote-box {
-      background: #eff6ff;
-      border: 1px solid #bfdbfe;
-      border-radius: 12px;
-      padding: 12px 14px;
-      margin: 12px 0;
-    }
-    .review-box {
-      background: #f0fdf4;
-      border: 1px solid #bbf7d0;
-      border-radius: 12px;
-      padding: 14px;
-      margin-top: 16px;
-    }
-  </style>
 </head>
 <body>
   <header class="app-header">
@@ -72,6 +18,11 @@
     <p id="state" class="muted" aria-live="polite">Yuklanmoqda...</p>
     <div id="retryBox" style="display: none; margin-bottom: 12px;">
       <button id="retryBtn" class="btn btn-outline" type="button">Qayta urinish</button>
+    </div>
+
+    <div id="notFoundBox" class="card empty-state" style="display: none;">
+      <p id="notFoundMsg" class="err" style="font-weight: 600; margin: 0 0 12px;">Buyurtma topilmadi</p>
+      <a class="btn btn-outline" href="my-orders.html">Buyurtmalarimga qaytish</a>
     </div>
 
     <div id="content" style="display: none;">
@@ -89,6 +40,10 @@
         </p>
 
         <p class="muted" style="margin: 4px 0;">
+          <strong>Yaratilgan vaqti:</strong> <span id="createdText"></span>
+        </p>
+
+        <p class="muted" style="margin: 4px 0;">
           <strong>Biriktirilgan usta:</strong> <span id="masterName"></span>
         </p>
 
@@ -96,7 +51,7 @@
         <div id="priceSection" style="margin-top: 12px;"></div>
 
         <!-- Bekor qilish tugmasi -->
-        <button id="cancelBtn" class="btn btn-danger btn-block" style="display: none; margin-top: 16px;">
+        <button id="cancelBtn" class="btn btn-danger btn-block" type="button" style="display: none; margin-top: 16px;">
           Bekor qilish
         </button>
       </div>
@@ -116,347 +71,372 @@
 
   <script src="js/api.js"></script>
   <script>
-    const user = requireAuth(["customer"]);
-    if (!user) throw new Error("redirect");
+    (() => {
+      const user = requireAuth(["customer"]);
+      if (!user) return;
 
-    renderNav("orders");
+      renderNav("orders");
 
-    const params = new URLSearchParams(window.location.search);
-    const orderId = params.get("id");
+      const params = new URLSearchParams(window.location.search);
+      const rawId = params.get("id");
+      const orderId = rawId && /^\d+$/.test(rawId) ? rawId : null;
 
-    const stateEl = document.getElementById("state");
-    const retryBoxEl = document.getElementById("retryBox");
-    const retryBtnEl = document.getElementById("retryBtn");
-    const contentEl = document.getElementById("content");
+      const stateEl = document.getElementById("state");
+      const retryBoxEl = document.getElementById("retryBox");
+      const retryBtnEl = document.getElementById("retryBtn");
+      const notFoundBoxEl = document.getElementById("notFoundBox");
+      const notFoundMsgEl = document.getElementById("notFoundMsg");
+      const contentEl = document.getElementById("content");
 
-    retryBtnEl.addEventListener("click", () => loadOrder());
-    const catNameEl = document.getElementById("catName");
-    const statusBadgeEl = document.getElementById("statusBadge");
-    const descEl = document.getElementById("desc");
-    const addressTextEl = document.getElementById("addressText");
-    const masterNameEl = document.getElementById("masterName");
-    const priceSectionEl = document.getElementById("priceSection");
-    const cancelBtn = document.getElementById("cancelBtn");
-    const timelineListEl = document.getElementById("timelineList");
-    const reviewSectionEl = document.getElementById("reviewSection");
+      retryBtnEl.addEventListener("click", () => loadOrder());
+      const catNameEl = document.getElementById("catName");
+      const statusBadgeEl = document.getElementById("statusBadge");
+      const descEl = document.getElementById("desc");
+      const addressTextEl = document.getElementById("addressText");
+      const createdTextEl = document.getElementById("createdText");
+      const masterNameEl = document.getElementById("masterName");
+      const priceSectionEl = document.getElementById("priceSection");
+      const cancelBtn = document.getElementById("cancelBtn");
+      const timelineListEl = document.getElementById("timelineList");
+      const reviewSectionEl = document.getElementById("reviewSection");
 
-    const STATUS_LABELS = {
-      searching: "Qidirilmoqda",
-      assigned: "Biriktirildi",
-      in_progress: "Jarayonda",
-      completed: "Yakunlandi",
-      cancelled: "Bekor qilindi",
-    };
+      const CANCELLABLE = new Set(["searching", "assigned"]);
 
-    const CANCELLABLE = new Set(["searching", "assigned"]);
-
-    function formatDate(dtStr) {
-      if (!dtStr) return "";
-      const d = new Date(dtStr);
-      return d.toLocaleDateString("uz-Latn") + " " + d.toLocaleTimeString("uz-Latn", { hour: "2-digit", minute: "2-digit" });
-    }
-
-    function renderTimeline(history) {
-      timelineListEl.replaceChildren();
-      if (!history || !history.length) {
-        const empty = document.createElement("p");
-        empty.className = "muted";
-        empty.textContent = "Tarix mavjud emas";
-        timelineListEl.appendChild(empty);
-        return;
-      }
-      history.forEach((h) => {
-        const item = document.createElement("div");
-        item.className = "timeline-item";
-
-        const dot = document.createElement("div");
-        dot.className = "timeline-dot";
-
-        const label = document.createElement("div");
-        label.style.fontWeight = "600";
-        label.textContent = STATUS_LABELS[h.to_status] || h.to_status;
-
-        const time = document.createElement("div");
-        time.className = "muted";
-        time.style.fontSize = "0.85rem";
-        time.textContent = formatDate(h.created_at);
-
-        item.append(dot, label, time);
-        timelineListEl.appendChild(item);
-      });
-    }
-
-    function renderPriceBlock(order) {
-      priceSectionEl.replaceChildren();
-
-      if (order.agreed_price != null) {
-        const box = document.createElement("div");
-        box.style.padding = "8px 0";
-
-        const label = document.createElement("span");
-        label.className = "muted";
-        label.textContent = "Kelishilgan narx: ";
-
-        const val = document.createElement("strong");
-        val.style.fontSize = "1.1rem";
-        val.style.color = "var(--primary)";
-        val.textContent = formatSom(order.agreed_price);
-
-        box.append(label, val);
-        priceSectionEl.appendChild(box);
-        return;
-      }
-
-      // Agar agreed_price belgilanmagan bo'lsa va taklif qilingan quote bo'lsa
-      const quotes = order.quotes || [];
-      const proposedQuote = quotes.slice().reverse().find((q) => q.status === "proposed");
-      if (proposedQuote && order.status === "assigned") {
-        const qBox = document.createElement("div");
-        qBox.className = "quote-box";
-
-        const qTitle = document.createElement("div");
-        qTitle.style.fontWeight = "600";
-        qTitle.style.color = "#1e40af";
-        qTitle.textContent = "Usta narx taklifi:";
-
-        const qPrice = document.createElement("div");
-        qPrice.style.fontSize = "1.2rem";
-        qPrice.style.fontWeight = "700";
-        qPrice.style.margin = "4px 0";
-        qPrice.textContent = formatSom(proposedQuote.price);
-
-        qBox.append(qTitle, qPrice);
-
-        if (proposedQuote.note) {
-          const qNote = document.createElement("div");
-          qNote.className = "muted";
-          qNote.style.fontSize = "0.9rem";
-          qNote.textContent = "Izoh: " + proposedQuote.note;
-          qBox.appendChild(qNote);
+      function renderTimeline(history) {
+        timelineListEl.replaceChildren();
+        if (!history || !history.length) {
+          const empty = document.createElement("p");
+          empty.className = "muted";
+          empty.textContent = "Tarix mavjud emas";
+          timelineListEl.appendChild(empty);
+          return;
         }
+        history.forEach((h) => {
+          const item = document.createElement("div");
+          item.className = "timeline-item";
 
-        const btnRow = document.createElement("div");
-        btnRow.style.display = "flex";
-        btnRow.style.gap = "8px";
-        btnRow.style.marginTop = "10px";
+          const dot = document.createElement("div");
+          dot.className = "timeline-dot";
 
-        const acceptBtn = document.createElement("button");
-        acceptBtn.className = "btn btn-accent";
-        acceptBtn.style.flex = "1";
-        acceptBtn.textContent = "Tasdiqlash";
+          const label = document.createElement("div");
+          label.style.fontWeight = "600";
+          label.textContent = formatOrderStatus(h.to_status);
 
-        const rejectBtn = document.createElement("button");
-        rejectBtn.className = "btn btn-outline";
-        rejectBtn.style.flex = "1";
-        rejectBtn.textContent = "Rad etish";
+          const time = document.createElement("div");
+          time.className = "muted";
+          time.style.fontSize = "0.85rem";
+          time.textContent = formatDate(h.created_at);
 
-        acceptBtn.addEventListener("click", async () => {
-          if (!confirm("Narx taklifini tasdiqlaysizmi: " + formatSom(proposedQuote.price) + "?")) return;
-          acceptBtn.disabled = true;
-          rejectBtn.disabled = true;
-          acceptBtn.textContent = "Tasdiqlanmoqda...";
-          try {
-            await apiFetch("/orders/" + order.id + "/quotes/" + proposedQuote.id + "/accept", {
-              method: "POST",
-            });
-            loadOrder();
-          } catch (err) {
-            alert(err.message);
-            acceptBtn.disabled = false;
-            rejectBtn.disabled = false;
-            acceptBtn.textContent = "Tasdiqlash";
-          }
+          item.append(dot, label, time);
+          timelineListEl.appendChild(item);
         });
+      }
 
-        rejectBtn.addEventListener("click", async () => {
-          if (!confirm("Narx taklifini rad etishni xohlaysizmi?")) return;
-          acceptBtn.disabled = true;
-          rejectBtn.disabled = true;
-          rejectBtn.textContent = "Rad etilmoqda...";
-          try {
-            await apiFetch("/orders/" + order.id + "/quotes/" + proposedQuote.id + "/reject", {
-              method: "POST",
-            });
-            loadOrder();
-          } catch (err) {
-            alert(err.message);
-            acceptBtn.disabled = false;
-            rejectBtn.disabled = false;
-            rejectBtn.textContent = "Rad etish";
+      function renderPriceBlock(order) {
+        priceSectionEl.replaceChildren();
+
+        if (order.agreed_price != null) {
+          const box = document.createElement("div");
+          box.style.padding = "8px 0";
+
+          const label = document.createElement("span");
+          label.className = "muted";
+          label.textContent = "Kelishilgan narx: ";
+
+          const val = document.createElement("strong");
+          val.style.fontSize = "1.1rem";
+          val.style.color = "var(--primary)";
+          val.textContent = formatSom(order.agreed_price);
+
+          box.append(label, val);
+          priceSectionEl.appendChild(box);
+          return;
+        }
+
+        const quotes = order.quotes || [];
+        const proposedQuote = quotes.slice().reverse().find((q) => q.status === "proposed");
+        if (proposedQuote && order.status === "assigned") {
+          const qBox = document.createElement("div");
+          qBox.className = "quote-box";
+
+          const qTitle = document.createElement("div");
+          qTitle.style.fontWeight = "600";
+          qTitle.style.color = "#1e40af";
+          qTitle.textContent = "Usta narx taklifi:";
+
+          const qPrice = document.createElement("div");
+          qPrice.style.fontSize = "1.2rem";
+          qPrice.style.fontWeight = "700";
+          qPrice.style.margin = "4px 0";
+          qPrice.textContent = formatSom(proposedQuote.price);
+
+          qBox.append(qTitle, qPrice);
+
+          if (proposedQuote.note) {
+            const qNote = document.createElement("div");
+            qNote.className = "muted";
+            qNote.style.fontSize = "0.9rem";
+            qNote.textContent = "Izoh: " + proposedQuote.note;
+            qBox.appendChild(qNote);
           }
-        });
 
-        btnRow.append(acceptBtn, rejectBtn);
-        qBox.appendChild(btnRow);
-        priceSectionEl.appendChild(qBox);
-      }
-    }
+          const btnRow = document.createElement("div");
+          btnRow.style.display = "flex";
+          btnRow.style.gap = "8px";
+          btnRow.style.marginTop = "10px";
 
-    function renderReviewBlock(order) {
-      reviewSectionEl.replaceChildren();
+          const acceptBtn = document.createElement("button");
+          acceptBtn.type = "button";
+          acceptBtn.className = "btn btn-accent";
+          acceptBtn.style.flex = "1";
+          acceptBtn.textContent = "Tasdiqlash";
 
-      if (order.review) {
-        const card = document.createElement("div");
-        card.className = "card review-box";
+          const rejectBtn = document.createElement("button");
+          rejectBtn.type = "button";
+          rejectBtn.className = "btn btn-outline";
+          rejectBtn.style.flex = "1";
+          rejectBtn.textContent = "Rad etish";
 
-        const title = document.createElement("strong");
-        title.style.color = "var(--ok)";
-        title.style.fontSize = "1.05rem";
-        title.textContent = "Sizning sharhingiz";
-
-        const ratingRow = document.createElement("div");
-        ratingRow.style.margin = "6px 0";
-        ratingRow.style.fontWeight = "600";
-        ratingRow.style.color = "#b45309";
-        ratingRow.textContent = "★ " + order.review.rating + " / 5";
-
-        card.append(title, ratingRow);
-
-        if (order.review.comment) {
-          const comm = document.createElement("p");
-          comm.style.margin = "4px 0 0";
-          comm.textContent = order.review.comment;
-          card.appendChild(comm);
-        }
-
-        reviewSectionEl.appendChild(card);
-        return;
-      }
-
-      if (order.can_review) {
-        const card = document.createElement("div");
-        card.className = "card";
-
-        const title = document.createElement("h2");
-        title.style.marginTop = "0";
-        title.textContent = "Xizmat haqida sharh qoldiring";
-
-        const starContainer = document.createElement("div");
-        starContainer.className = "star-rating";
-
-        let selectedRating = 5;
-        const stars = [];
-
-        function updateStars(val) {
-          selectedRating = val;
-          stars.forEach((s, idx) => {
-            if (idx < val) {
-              s.classList.add("active");
-            } else {
-              s.classList.remove("active");
-            }
-          });
-        }
-
-        for (let i = 1; i <= 5; i++) {
-          const s = document.createElement("span");
-          s.textContent = "★";
-          s.setAttribute("role", "button");
-          s.setAttribute("aria-label", i + " yulduz");
-          s.addEventListener("click", () => updateStars(i));
-          stars.push(s);
-          starContainer.appendChild(s);
-        }
-        updateStars(5);
-
-        const label = document.createElement("label");
-        label.setAttribute("for", "commentInput");
-        label.textContent = "Sharh (ixtiyoriy):";
-
-        const textarea = document.createElement("textarea");
-        textarea.id = "commentInput";
-        textarea.placeholder = "Usta ishi, sifati va muomalasi haqida fikringiz...";
-        textarea.maxLength = 1000;
-
-        const errEl = document.createElement("div");
-        errEl.className = "form-error";
-
-        const submitBtn = document.createElement("button");
-        submitBtn.className = "btn btn-block btn-accent";
-        submitBtn.style.marginTop = "12px";
-        submitBtn.textContent = "Sharh yuborish";
-
-        submitBtn.addEventListener("click", async () => {
-          errEl.textContent = "";
-          submitBtn.disabled = true;
-          submitBtn.textContent = "Yuborilmoqda...";
-
-          try {
-            await apiFetch("/orders/" + order.id + "/review", {
-              method: "POST",
-              body: JSON.stringify({
-                rating: selectedRating,
-                comment: textarea.value.trim() || null,
-              }),
-            });
-            loadOrder();
-          } catch (err) {
-            errEl.textContent = err.message;
-            submitBtn.disabled = false;
-            submitBtn.textContent = "Sharh yuborish";
-          }
-        });
-
-        card.append(title, starContainer, label, textarea, errEl, submitBtn);
-        reviewSectionEl.appendChild(card);
-      }
-    }
-
-    async function loadOrder() {
-      if (!orderId) {
-        stateEl.textContent = "Buyurtma ID ko'rsatilmadi";
-        stateEl.className = "err";
-        return;
-      }
-
-      retryBoxEl.style.display = "none";
-      stateEl.textContent = "Yuklanmoqda...";
-      stateEl.className = "muted";
-
-      try {
-        const order = await apiFetch("/orders/" + orderId);
-        stateEl.textContent = "";
-        contentEl.style.display = "block";
-
-        catNameEl.textContent = order.category_name;
-        statusBadgeEl.className = "badge badge-" + order.status;
-        statusBadgeEl.textContent = STATUS_LABELS[order.status] || order.status;
-
-        descEl.textContent = order.description;
-        addressTextEl.textContent = order.city + ", " + order.district + ", " + order.address;
-        masterNameEl.textContent = order.master_name || "Biriktirilmagan";
-
-        renderPriceBlock(order);
-        renderTimeline(order.history);
-        renderReviewBlock(order);
-
-        if (CANCELLABLE.has(order.status)) {
-          cancelBtn.style.display = "block";
-          cancelBtn.onclick = async () => {
-            if (!confirm("Buyurtmani bekor qilishni xohlaysizmi?")) return;
-            cancelBtn.disabled = true;
-            cancelBtn.textContent = "Bekor qilinmoqda...";
+          acceptBtn.addEventListener("click", async () => {
+            if (!confirm("Narx taklifini tasdiqlaysizmi: " + formatSom(proposedQuote.price) + "?")) return;
+            acceptBtn.disabled = true;
+            rejectBtn.disabled = true;
+            acceptBtn.textContent = "Tasdiqlanmoqda...";
             try {
-              await apiFetch("/orders/" + order.id + "/cancel", { method: "POST" });
+              await apiFetch("/orders/" + order.id + "/quotes/" + proposedQuote.id + "/accept", {
+                method: "POST",
+              });
               loadOrder();
             } catch (err) {
               alert(err.message);
-              cancelBtn.disabled = false;
-              cancelBtn.textContent = "Bekor qilish";
+              acceptBtn.disabled = false;
+              rejectBtn.disabled = false;
+              acceptBtn.textContent = "Tasdiqlash";
             }
-          };
-        } else {
-          cancelBtn.style.display = "none";
-        }
-      } catch (err) {
-        stateEl.textContent = err.message || "Buyurtma topilmadi";
-        stateEl.className = "err";
-        retryBoxEl.style.display = "block";
-        contentEl.style.display = "none";
-      }
-    }
+          });
 
-    loadOrder();
+          rejectBtn.addEventListener("click", async () => {
+            if (!confirm("Narx taklifini rad etishni xohlaysizmi?")) return;
+            acceptBtn.disabled = true;
+            rejectBtn.disabled = true;
+            rejectBtn.textContent = "Rad etilmoqda...";
+            try {
+              await apiFetch("/orders/" + order.id + "/quotes/" + proposedQuote.id + "/reject", {
+                method: "POST",
+              });
+              loadOrder();
+            } catch (err) {
+              alert(err.message);
+              acceptBtn.disabled = false;
+              rejectBtn.disabled = false;
+              rejectBtn.textContent = "Rad etish";
+            }
+          });
+
+          btnRow.append(acceptBtn, rejectBtn);
+          qBox.appendChild(btnRow);
+          priceSectionEl.appendChild(qBox);
+        }
+      }
+
+      function renderReviewBlock(order) {
+        reviewSectionEl.replaceChildren();
+
+        if (order.review) {
+          const card = document.createElement("div");
+          card.className = "card review-box";
+
+          const head = document.createElement("div");
+          head.className = "card-row";
+
+          const title = document.createElement("strong");
+          title.style.color = "var(--ok)";
+          title.style.fontSize = "1.05rem";
+          title.textContent = "Sizning sharhingiz";
+
+          const dateSpan = document.createElement("span");
+          dateSpan.className = "muted";
+          dateSpan.textContent = formatDate(order.review.created_at);
+
+          head.append(title, dateSpan);
+
+          const ratingRow = document.createElement("div");
+          ratingRow.style.margin = "6px 0";
+          ratingRow.style.fontWeight = "600";
+          ratingRow.style.color = "#b45309";
+          ratingRow.textContent = "★ " + order.review.rating + " / 5";
+
+          card.append(head, ratingRow);
+
+          if (order.review.comment) {
+            const comm = document.createElement("p");
+            comm.style.margin = "4px 0 0";
+            comm.textContent = order.review.comment;
+            card.appendChild(comm);
+          }
+
+          reviewSectionEl.appendChild(card);
+          return;
+        }
+
+        if (order.can_review) {
+          const form = document.createElement("form");
+          form.className = "card";
+          form.noValidate = true;
+
+          const title = document.createElement("h2");
+          title.style.marginTop = "0";
+          title.textContent = "Xizmat haqida sharh qoldiring";
+
+          const starContainer = document.createElement("div");
+          starContainer.className = "star-rating";
+          starContainer.setAttribute("role", "radiogroup");
+          starContainer.setAttribute("aria-label", "Baho");
+
+          let selectedRating = 5;
+          const stars = [];
+
+          function updateStars(val) {
+            selectedRating = val;
+            stars.forEach((s, idx) => {
+              const isSelected = idx < val;
+              s.classList.toggle("active", isSelected);
+              s.setAttribute("aria-pressed", String(idx + 1 === val));
+            });
+          }
+
+          for (let i = 1; i <= 5; i++) {
+            const s = document.createElement("button");
+            s.type = "button";
+            s.textContent = "★";
+            s.setAttribute("aria-label", i + " yulduz");
+            s.addEventListener("click", () => updateStars(i));
+            stars.push(s);
+            starContainer.appendChild(s);
+          }
+          updateStars(5);
+
+          const label = document.createElement("label");
+          label.setAttribute("for", "commentInput");
+          label.textContent = "Sharh (ixtiyoriy):";
+
+          const textarea = document.createElement("textarea");
+          textarea.id = "commentInput";
+          textarea.placeholder = "Usta ishi, sifati va muomalasi haqida fikringiz...";
+          textarea.maxLength = 1000;
+
+          const errEl = document.createElement("div");
+          errEl.className = "form-error";
+          errEl.setAttribute("role", "alert");
+
+          const submitBtn = document.createElement("button");
+          submitBtn.type = "submit";
+          submitBtn.className = "btn btn-block btn-accent";
+          submitBtn.style.marginTop = "12px";
+          submitBtn.textContent = "Sharh yuborish";
+
+          form.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            errEl.textContent = "";
+            submitBtn.disabled = true;
+            submitBtn.textContent = "Yuborilmoqda...";
+
+            try {
+              await apiFetch("/orders/" + order.id + "/review", {
+                method: "POST",
+                body: JSON.stringify({
+                  rating: selectedRating,
+                  comment: textarea.value.trim() || null,
+                }),
+              });
+              loadOrder();
+            } catch (err) {
+              errEl.textContent = err.message;
+              submitBtn.disabled = false;
+              submitBtn.textContent = "Sharh yuborish";
+            }
+          });
+
+          form.append(title, starContainer, label, textarea, errEl, submitBtn);
+          reviewSectionEl.appendChild(form);
+        }
+      }
+
+      async function loadOrder() {
+        retryBoxEl.style.display = "none";
+        notFoundBoxEl.style.display = "none";
+        contentEl.style.display = "none";
+
+        if (!orderId) {
+          stateEl.textContent = "";
+          notFoundMsgEl.textContent = "Buyurtma topilmadi";
+          notFoundBoxEl.style.display = "block";
+          return;
+        }
+
+        retryBtnEl.disabled = true;
+        stateEl.textContent = "Yuklanmoqda...";
+        stateEl.className = "muted";
+
+        try {
+          const order = await apiFetch("/orders/" + orderId);
+          retryBtnEl.disabled = false;
+          stateEl.textContent = "";
+          contentEl.style.display = "block";
+
+          catNameEl.textContent = order.category_name;
+          statusBadgeEl.className = "badge badge-" + order.status;
+          statusBadgeEl.textContent = formatOrderStatus(order.status);
+
+          descEl.textContent = order.description;
+          addressTextEl.textContent = order.city + ", " + order.district + ", " + order.address;
+          createdTextEl.textContent = formatDate(order.created_at);
+          masterNameEl.textContent = order.master_name || "Biriktirilmagan";
+
+          renderPriceBlock(order);
+          renderTimeline(order.history);
+          renderReviewBlock(order);
+
+          if (CANCELLABLE.has(order.status)) {
+            cancelBtn.style.display = "block";
+            cancelBtn.disabled = false;
+            cancelBtn.textContent = "Bekor qilish";
+            cancelBtn.onclick = async () => {
+              if (!confirm("Buyurtmani bekor qilishni xohlaysizmi?")) return;
+              cancelBtn.disabled = true;
+              cancelBtn.textContent = "Bekor qilinmoqda...";
+              try {
+                await apiFetch("/orders/" + order.id + "/cancel", { method: "POST" });
+                loadOrder();
+              } catch (err) {
+                alert(err.message);
+                cancelBtn.disabled = false;
+                cancelBtn.textContent = "Bekor qilish";
+              }
+            };
+          } else {
+            cancelBtn.style.display = "none";
+          }
+        } catch (err) {
+          retryBtnEl.disabled = false;
+          if (err.status === 403) {
+            renderForbidden(err.message);
+            return;
+          }
+          if (err.status === 404) {
+            stateEl.textContent = "";
+            notFoundMsgEl.textContent = "Buyurtma topilmadi";
+            notFoundBoxEl.style.display = "block";
+            return;
+          }
+          stateEl.textContent = "Xatolik: " + (err.message || "Buyurtma topilmadi");
+          stateEl.className = "err";
+          retryBoxEl.style.display = "block";
+        }
+      }
+
+      loadOrder();
+    })();
   </script>
 </body>
 </html>

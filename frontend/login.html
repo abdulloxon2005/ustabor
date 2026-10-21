@@ -23,7 +23,7 @@
 
       <label for="password">Parol</label>
       <input id="password" name="password" type="password"
-             autocomplete="current-password" required />
+             autocomplete="current-password" minlength="8" maxlength="72" required />
 
       <div id="error" class="form-error" role="alert"></div>
 
@@ -35,7 +35,6 @@
 
   <script src="js/api.js"></script>
   <script>
-    // Allaqachon kirgan bo'lsa, o'z sahifasiga yo'naltiriladi
     if (getToken() && getUser()) {
       window.location.replace(homeFor(getUser()));
     }

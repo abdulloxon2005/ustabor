@@ -26,276 +26,260 @@
 
   <script src="js/api.js"></script>
   <script>
-    const user = requireAuth(["customer"]);
-    if (!user) throw new Error("redirect");
+    (() => {
+      const user = requireAuth(["customer"]);
+      if (!user) return;
 
-    renderNav("orders");
+      renderNav("orders");
 
-    const stateEl = document.getElementById("state");
-    const retryBoxEl = document.getElementById("retry-box");
-    const retryBtnEl = document.getElementById("retry-btn");
-    const listEl = document.getElementById("list");
+      const stateEl = document.getElementById("state");
+      const retryBoxEl = document.getElementById("retry-box");
+      const retryBtnEl = document.getElementById("retry-btn");
+      const listEl = document.getElementById("list");
 
-    retryBtnEl.addEventListener("click", () => load());
+      retryBtnEl.addEventListener("click", () => load());
 
-    const orderNote = sessionStorage.getItem("order_note");
-    if (orderNote) {
-      sessionStorage.removeItem("order_note");
-      const noteBanner = document.createElement("div");
-      noteBanner.className = "card";
-      noteBanner.style.background = "#fef3c7";
-      noteBanner.style.border = "1px solid #f59e0b";
-      noteBanner.style.color = "#92400e";
-      noteBanner.style.marginBottom = "12px";
-      noteBanner.textContent = orderNote;
-      document.querySelector("main.container").insertBefore(noteBanner, stateEl);
-    }
-
-    const STATUS_LABEL = {
-      searching: "Qidirilmoqda",
-      assigned: "Usta tayinlangan",
-      in_progress: "Usta ishlamoqda",
-      completed: "Yakunlandi",
-      cancelled: "Bekor qilingan",
-    };
-
-    const CANCELLABLE = new Set(["searching", "assigned"]);
-
-    function renderOrder(o) {
-      const card = document.createElement("div");
-      card.className = "card order-card";
-
-      // Sarlavha qatori: kategoriya + holat
-      const row = document.createElement("div");
-      row.className = "card-row";
-      const cat = document.createElement("a");
-      cat.href = "order-detail.html?id=" + o.id;
-      cat.style.fontWeight = "700";
-      cat.style.color = "var(--text)";
-      cat.textContent = o.category_name;
-      const badge = document.createElement("span");
-      badge.className = "badge badge-" + o.status;
-      badge.textContent = STATUS_LABEL[o.status] || o.status;
-      row.append(cat, badge);
-      card.appendChild(row);
-
-      // Tavsif
-      const desc = document.createElement("p");
-      desc.style.margin = "8px 0 4px";
-      desc.textContent = o.description.length > 120
-        ? o.description.slice(0, 117) + "..."
-        : o.description;
-      card.appendChild(desc);
-
-      // Manzil va sana
-      const meta = document.createElement("p");
-      meta.className = "muted";
-      meta.style.margin = "0";
-      const d = new Date(o.created_at);
-      meta.textContent = o.city + ", " + o.district + " · "
-        + d.toLocaleDateString("uz-Latn") + " " + d.toLocaleTimeString("uz-Latn", {hour:"2-digit", minute:"2-digit"});
-      card.appendChild(meta);
-
-      // Narx
-      if (o.agreed_price != null) {
-        const price = document.createElement("p");
-        price.style.margin = "6px 0 0";
-        price.style.fontWeight = "600";
-        price.textContent = "Kelishilgan narx: " + formatSom(o.agreed_price);
-        card.appendChild(price);
+      const orderNote = sessionStorage.getItem("order_note");
+      if (orderNote) {
+        sessionStorage.removeItem("order_note");
+        const noteBanner = document.createElement("div");
+        noteBanner.className = "status-banner pending";
+        noteBanner.textContent = orderNote;
+        document.querySelector("main.container").insertBefore(noteBanner, stateEl);
       }
 
-      // Taklif holati
-      const offerStateEl = document.createElement("p");
-      offerStateEl.style.margin = "8px 0 0";
-      offerStateEl.style.fontWeight = "500";
-      offerStateEl.style.fontSize = "0.9rem";
+      const CANCELLABLE = new Set(["searching", "assigned"]);
 
-      const offers = o.offers || [];
-      const hasPending = offers.some((x) => x.status === "pending");
-      const latestOffer = offers.length ? offers[offers.length - 1] : null;
+      function renderOrder(o) {
+        const card = document.createElement("div");
+        card.className = "card order-card";
 
-      if (o.status === "assigned" || o.master_name) {
-        offerStateEl.textContent = "Usta biriktirildi: " + (o.master_name || "Usta");
-        offerStateEl.style.color = "var(--primary)";
-        card.appendChild(offerStateEl);
+        const row = document.createElement("div");
+        row.className = "card-row";
+        const cat = document.createElement("a");
+        cat.href = "order-detail.html?id=" + encodeURIComponent(o.id);
+        cat.style.fontWeight = "700";
+        cat.style.color = "var(--text)";
+        cat.textContent = o.category_name;
+        const badge = document.createElement("span");
+        badge.className = "badge badge-" + o.status;
+        badge.textContent = formatOrderStatus(o.status);
+        row.append(cat, badge);
+        card.appendChild(row);
 
-        // Usta narx taklifi bo'lsa (agreed_price hali tasdiqlanmagan holda)
-        if (o.status === "assigned" && o.agreed_price == null) {
-          const quotes = o.quotes || [];
-          const proposedQuote = quotes.slice().reverse().find((q) => q.status === "proposed");
-          if (proposedQuote) {
-            const quoteBox = document.createElement("div");
-            quoteBox.style.background = "#eff6ff";
-            quoteBox.style.border = "1px solid #bfdbfe";
-            quoteBox.style.borderRadius = "10px";
-            quoteBox.style.padding = "10px 12px";
-            quoteBox.style.margin = "10px 0";
+        const desc = document.createElement("p");
+        desc.style.margin = "8px 0 4px";
+        desc.textContent = o.description.length > 120
+          ? o.description.slice(0, 117) + "..."
+          : o.description;
+        card.appendChild(desc);
 
-            const title = document.createElement("div");
-            title.style.fontWeight = "600";
-            title.style.color = "#1e40af";
-            title.textContent = "Usta narx taklifi:";
+        const meta = document.createElement("p");
+        meta.className = "muted";
+        meta.style.margin = "0";
+        meta.textContent = o.city + ", " + o.district + " · " + formatDate(o.created_at);
+        card.appendChild(meta);
 
-            const pPrice = document.createElement("div");
-            pPrice.style.fontSize = "1.1rem";
-            pPrice.style.fontWeight = "700";
-            pPrice.style.margin = "4px 0";
-            pPrice.textContent = formatSom(proposedQuote.price);
+        if (o.agreed_price != null) {
+          const price = document.createElement("p");
+          price.style.margin = "6px 0 0";
+          price.style.fontWeight = "600";
+          price.textContent = "Kelishilgan narx: " + formatSom(o.agreed_price);
+          card.appendChild(price);
+        }
 
-            quoteBox.append(title, pPrice);
+        const offerStateEl = document.createElement("p");
+        offerStateEl.style.margin = "8px 0 0";
+        offerStateEl.style.fontWeight = "500";
+        offerStateEl.style.fontSize = "0.9rem";
 
-            if (proposedQuote.note) {
-              const pNote = document.createElement("div");
-              pNote.className = "muted";
-              pNote.style.fontSize = "0.85rem";
-              pNote.textContent = "Izoh: " + proposedQuote.note;
-              quoteBox.appendChild(pNote);
+        const offers = o.offers || [];
+        const hasPending = offers.some((x) => x.status === "pending");
+        const latestOffer = offers.length ? offers[offers.length - 1] : null;
+
+        if (o.status === "assigned" || o.master_name) {
+          offerStateEl.textContent = "Usta biriktirildi: " + (o.master_name || "Usta");
+          offerStateEl.style.color = "var(--primary)";
+          card.appendChild(offerStateEl);
+
+          if (o.status === "assigned" && o.agreed_price == null) {
+            const quotes = o.quotes || [];
+            const proposedQuote = quotes.slice().reverse().find((q) => q.status === "proposed");
+            if (proposedQuote) {
+              const quoteBox = document.createElement("div");
+              quoteBox.className = "quote-box";
+
+              const title = document.createElement("div");
+              title.style.fontWeight = "600";
+              title.style.color = "#1e40af";
+              title.textContent = "Usta narx taklifi:";
+
+              const pPrice = document.createElement("div");
+              pPrice.style.fontSize = "1.1rem";
+              pPrice.style.fontWeight = "700";
+              pPrice.style.margin = "4px 0";
+              pPrice.textContent = formatSom(proposedQuote.price);
+
+              quoteBox.append(title, pPrice);
+
+              if (proposedQuote.note) {
+                const pNote = document.createElement("div");
+                pNote.className = "muted";
+                pNote.style.fontSize = "0.85rem";
+                pNote.textContent = "Izoh: " + proposedQuote.note;
+                quoteBox.appendChild(pNote);
+              }
+
+              const btnRow = document.createElement("div");
+              btnRow.style.display = "flex";
+              btnRow.style.gap = "8px";
+              btnRow.style.marginTop = "8px";
+
+              const acceptBtn = document.createElement("button");
+              acceptBtn.type = "button";
+              acceptBtn.className = "btn btn-accent";
+              acceptBtn.style.flex = "1";
+              acceptBtn.textContent = "Tasdiqlash";
+
+              const rejectBtn = document.createElement("button");
+              rejectBtn.type = "button";
+              rejectBtn.className = "btn btn-outline";
+              rejectBtn.style.flex = "1";
+              rejectBtn.textContent = "Rad etish";
+
+              acceptBtn.addEventListener("click", async () => {
+                if (!confirm("Narx taklifini tasdiqlaysizmi: " + formatSom(proposedQuote.price) + "?")) return;
+                acceptBtn.disabled = true;
+                rejectBtn.disabled = true;
+                acceptBtn.textContent = "Tasdiqlanmoqda...";
+                try {
+                  await apiFetch("/orders/" + o.id + "/quotes/" + proposedQuote.id + "/accept", {
+                    method: "POST",
+                  });
+                  load();
+                } catch (err) {
+                  alert(err.message);
+                  acceptBtn.disabled = false;
+                  rejectBtn.disabled = false;
+                  acceptBtn.textContent = "Tasdiqlash";
+                }
+              });
+
+              rejectBtn.addEventListener("click", async () => {
+                if (!confirm("Narx taklifini rad etishni xohlaysizmi?")) return;
+                acceptBtn.disabled = true;
+                rejectBtn.disabled = true;
+                rejectBtn.textContent = "Rad etilmoqda...";
+                try {
+                  await apiFetch("/orders/" + o.id + "/quotes/" + proposedQuote.id + "/reject", {
+                    method: "POST",
+                  });
+                  load();
+                } catch (err) {
+                  alert(err.message);
+                  acceptBtn.disabled = false;
+                  rejectBtn.disabled = false;
+                  rejectBtn.textContent = "Rad etish";
+                }
+              });
+
+              btnRow.append(acceptBtn, rejectBtn);
+              quoteBox.appendChild(btnRow);
+              card.appendChild(quoteBox);
             }
+          }
+        } else if (o.status === "searching") {
+          if (hasPending) {
+            offerStateEl.textContent = "Usta javobi kutilmoqda";
+            offerStateEl.style.color = "#d97706";
+            card.appendChild(offerStateEl);
+          } else if (latestOffer && latestOffer.status === "rejected") {
+            offerStateEl.textContent = "Usta rad etdi";
+            offerStateEl.style.color = "var(--err)";
+            card.appendChild(offerStateEl);
+          }
 
-            const btnRow = document.createElement("div");
-            btnRow.style.display = "flex";
-            btnRow.style.gap = "8px";
-            btnRow.style.marginTop = "8px";
-
-            const acceptBtn = document.createElement("button");
-            acceptBtn.className = "btn btn-accent";
-            acceptBtn.style.flex = "1";
-            acceptBtn.style.minHeight = "40px";
-            acceptBtn.textContent = "Tasdiqlash";
-
-            const rejectBtn = document.createElement("button");
-            rejectBtn.className = "btn btn-outline";
-            rejectBtn.style.flex = "1";
-            rejectBtn.style.minHeight = "40px";
-            rejectBtn.textContent = "Rad etish";
-
-            acceptBtn.addEventListener("click", async () => {
-              if (!confirm("Narx taklifini tasdiqlaysizmi: " + formatSom(proposedQuote.price) + "?")) return;
-              acceptBtn.disabled = true;
-              rejectBtn.disabled = true;
-              acceptBtn.textContent = "Tasdiqlanmoqda...";
-              try {
-                await apiFetch("/orders/" + o.id + "/quotes/" + proposedQuote.id + "/accept", {
-                  method: "POST",
-                });
-                load();
-              } catch (err) {
-                alert(err.message);
-                acceptBtn.disabled = false;
-                rejectBtn.disabled = false;
-                acceptBtn.textContent = "Tasdiqlash";
-              }
+          if (o.selection_mode === "manual" && !hasPending) {
+            const chooseLink = document.createElement("a");
+            chooseLink.className = "btn btn-outline btn-block";
+            chooseLink.style.marginTop = "8px";
+            chooseLink.textContent = "Usta tanlash";
+            const q = new URLSearchParams({
+              category_id: o.category_id,
+              city: o.city,
+              district: o.district,
+              order_id: o.id,
             });
-
-            rejectBtn.addEventListener("click", async () => {
-              if (!confirm("Narx taklifini rad etishni xohlaysizmi?")) return;
-              acceptBtn.disabled = true;
-              rejectBtn.disabled = true;
-              rejectBtn.textContent = "Rad etilmoqda...";
-              try {
-                await apiFetch("/orders/" + o.id + "/quotes/" + proposedQuote.id + "/reject", {
-                  method: "POST",
-                });
-                load();
-              } catch (err) {
-                alert(err.message);
-                acceptBtn.disabled = false;
-                rejectBtn.disabled = false;
-                rejectBtn.textContent = "Rad etish";
-              }
-            });
-
-            btnRow.append(acceptBtn, rejectBtn);
-            quoteBox.appendChild(btnRow);
-            card.appendChild(quoteBox);
+            chooseLink.href = "masters.html?" + q.toString();
+            card.appendChild(chooseLink);
           }
         }
-      } else if (o.status === "searching") {
-        if (hasPending) {
-          offerStateEl.textContent = "Usta javobi kutilmoqda";
-          offerStateEl.style.color = "#d97706";
-          card.appendChild(offerStateEl);
-        } else if (latestOffer && latestOffer.status === "rejected") {
-          offerStateEl.textContent = "Usta rad etdi";
-          offerStateEl.style.color = "var(--err)";
-          card.appendChild(offerStateEl);
-        }
 
-        // Qidiruv holatidagi manual buyurtma va pending taklif bo'lmasa -> Usta tanlash
-        if (o.selection_mode === "manual" && !hasPending) {
-          const chooseLink = document.createElement("a");
-          chooseLink.className = "btn btn-outline btn-block";
-          chooseLink.style.marginTop = "8px";
-          chooseLink.textContent = "Usta tanlash";
-          const q = new URLSearchParams({
-            category_id: o.category_id,
-            city: o.city,
-            district: o.district,
-            order_id: o.id,
+        if (CANCELLABLE.has(o.status)) {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "btn btn-danger btn-block";
+          btn.style.marginTop = "12px";
+          btn.textContent = "Bekor qilish";
+          btn.addEventListener("click", async () => {
+            if (!confirm("Buyurtmani bekor qilishni xohlaysizmi?")) return;
+            btn.disabled = true;
+            btn.textContent = "Bekor qilinmoqda...";
+            try {
+              await apiFetch("/orders/" + o.id + "/cancel", { method: "POST" });
+              load();
+            } catch (err) {
+              alert(err.message);
+              btn.disabled = false;
+              btn.textContent = "Bekor qilish";
+            }
           });
-          chooseLink.href = "masters.html?" + q.toString();
-          card.appendChild(chooseLink);
+          card.appendChild(btn);
         }
+
+        const detailLink = document.createElement("a");
+        detailLink.className = "btn btn-outline btn-block";
+        detailLink.style.marginTop = "10px";
+        detailLink.textContent = "Batafsil ko'rish →";
+        detailLink.href = "order-detail.html?id=" + encodeURIComponent(o.id);
+        card.appendChild(detailLink);
+
+        return card;
       }
 
-      // Bekor qilish tugmasi
-      if (CANCELLABLE.has(o.status)) {
-        const btn = document.createElement("button");
-        btn.className = "btn btn-danger btn-block";
-        btn.style.marginTop = "12px";
-        btn.textContent = "Bekor qilish";
-        btn.addEventListener("click", async () => {
-          if (!confirm("Buyurtmani bekor qilishni xohlaysizmi?")) return;
-          btn.disabled = true;
-          btn.textContent = "Bekor qilinmoqda...";
-          try {
-            await apiFetch("/orders/" + o.id + "/cancel", { method: "POST" });
-            load();
-          } catch (err) {
-            alert(err.message);
-            btn.disabled = false;
-            btn.textContent = "Bekor qilish";
+      async function load() {
+        listEl.replaceChildren();
+        retryBoxEl.style.display = "none";
+        retryBtnEl.disabled = true;
+        stateEl.textContent = "Yuklanmoqda...";
+        stateEl.className = "muted";
+        try {
+          const orders = await apiFetch("/orders");
+          retryBtnEl.disabled = false;
+          if (!orders.length) {
+            stateEl.textContent = "";
+            const empty = document.createElement("div");
+            empty.className = "card empty-state";
+            empty.textContent = "Hali buyurtma yo'q";
+            listEl.appendChild(empty);
+            return;
           }
-        });
-        card.appendChild(btn);
-      }
-      // Batafsil sahifasiga o'tish
-      const detailLink = document.createElement("a");
-      detailLink.className = "btn btn-outline btn-block";
-      detailLink.style.marginTop = "10px";
-      detailLink.textContent = "Batafsil ko'rish →";
-      detailLink.href = "order-detail.html?id=" + o.id;
-      card.appendChild(detailLink);
-
-      return card;
-    }
-
-    async function load() {
-      listEl.replaceChildren();
-      retryBoxEl.style.display = "none";
-      stateEl.textContent = "Yuklanmoqda...";
-      stateEl.className = "muted";
-      try {
-        const orders = await apiFetch("/orders");
-        if (!orders.length) {
-          stateEl.textContent = "";
-          const empty = document.createElement("div");
-          empty.className = "card empty-state";
-          empty.textContent = "Hali buyurtma yo'q";
-          listEl.appendChild(empty);
-          return;
+          stateEl.textContent = orders.length + " ta buyurtma";
+          orders.forEach((o) => listEl.appendChild(renderOrder(o)));
+        } catch (e) {
+          retryBtnEl.disabled = false;
+          if (e.status === 403) {
+            renderForbidden(e.message);
+            return;
+          }
+          stateEl.textContent = "Xatolik: " + e.message;
+          stateEl.className = "err";
+          retryBoxEl.style.display = "block";
         }
-        stateEl.textContent = orders.length + " ta buyurtma";
-        orders.forEach((o) => listEl.appendChild(renderOrder(o)));
-      } catch (e) {
-        stateEl.textContent = "Xatolik: " + e.message;
-        stateEl.className = "err";
-        retryBoxEl.style.display = "block";
       }
-    }
 
-    load();
+      load();
+    })();
   </script>
 </body>
 </html>

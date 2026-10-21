@@ -5,6 +5,56 @@ const API_BASE = `http://${window.location.hostname}:8000/api/v1`;
 const TOKEN_KEY = "ustabor_token";
 const USER_KEY = "ustabor_user";
 
+// ===== Umumiy holat va rol lug'atlari =====
+const ORDER_STATUS_LABELS = {
+  searching: "Qidirilmoqda",
+  assigned: "Biriktirildi",
+  in_progress: "Jarayonda",
+  completed: "Yakunlandi",
+  cancelled: "Bekor qilindi",
+};
+
+const ROLE_LABELS = {
+  customer: "Mijoz",
+  master: "Usta",
+  admin: "Admin",
+};
+
+const PAYMENT_STATUS_LABELS = {
+  paid: "To'langan",
+  pending: "Kutilmoqda",
+};
+
+function formatOrderStatus(status) {
+  return ORDER_STATUS_LABELS[status] || status || "";
+}
+
+function formatRole(role) {
+  return ROLE_LABELS[role] || role || "";
+}
+
+function formatPaymentStatus(status) {
+  return PAYMENT_STATUS_LABELS[status] || status || "To'langan";
+}
+
+function formatDate(dtStr) {
+  if (!dtStr) return "—";
+  const d = new Date(dtStr);
+  if (isNaN(d.getTime())) return "—";
+  const pad = (n) => String(n).padStart(2, "0");
+  return (
+    pad(d.getDate()) +
+    "." +
+    pad(d.getMonth() + 1) +
+    "." +
+    d.getFullYear() +
+    " " +
+    pad(d.getHours()) +
+    ":" +
+    pad(d.getMinutes())
+  );
+}
+
 // ===== Sessiya =====
 function saveSession(token, user) {
   localStorage.setItem(TOKEN_KEY, token);
@@ -40,7 +90,34 @@ function homeFor(user) {
   return "index.html";
 }
 
-// Sahifani himoyalash: kirmagan -> login.html, noto'g'ri rol -> o'z sahifasi.
+// 403 / ruxsat yo'q holatini sahifada ko'rsatish
+function renderForbidden(message) {
+  const main = document.querySelector("main.container");
+  if (!main) return;
+  main.replaceChildren();
+
+  const card = document.createElement("div");
+  card.className = "card empty-state";
+
+  const title = document.createElement("h1");
+  title.textContent = "Ruxsat yo'q";
+
+  const desc = document.createElement("p");
+  desc.className = "muted";
+  desc.textContent = message || "Bu sahifani ko'rish uchun sizda ruxsat yo'q.";
+
+  const homeLink = document.createElement("a");
+  homeLink.className = "btn";
+  homeLink.style.marginTop = "12px";
+  homeLink.href = homeFor(getUser());
+  homeLink.textContent = "Bosh sahifaga qaytish";
+
+  card.append(title, desc, homeLink);
+  main.appendChild(card);
+  renderNav("");
+}
+
+// Sahifani himoyalash: kirmagan -> login.html, noto'g'ri rol -> "Ruxsat yo'q" va bosh sahifaga havola.
 // Ruxsat bo'lsa foydalanuvchini qaytaradi, aks holda null.
 function requireAuth(roles) {
   const user = getUser();
@@ -50,7 +127,7 @@ function requireAuth(roles) {
     return null;
   }
   if (roles && roles.length && !roles.includes(user.role)) {
-    window.location.replace(homeFor(user));
+    renderForbidden("Bu sahifa faqat " + roles.map(formatRole).join(", ") + " uchun mo'ljallangan.");
     return null;
   }
   return user;
@@ -65,10 +142,22 @@ const FIELD_LABELS = {
   bio: "Ma'lumot",
   city: "Shahar",
   district: "Tuman",
+  address: "Manzil",
+  description: "Tavsif",
   category_id: "Xizmat turi",
+  selection_mode: "Tanlash usuli",
+  master_id: "Usta",
   pricing_type: "Narxlash turi",
   base_price: "Narx",
+  price: "Narx",
+  note: "Izoh",
+  rating: "Baho",
+  comment: "Sharh",
   is_available: "Holat",
+  is_active: "Faollik holati",
+  is_approved: "Tasdiqlash holati",
+  date_from: "Boshlanish sanasi",
+  date_to: "Tugash sanasi",
 };
 
 function formatValidationItem(item) {
@@ -85,6 +174,19 @@ function formatValidationItem(item) {
       break;
     case "string_too_long":
       text = `ko'pi bilan ${ctx.max_length} ta belgidan iborat bo'lishi kerak`;
+      break;
+    case "greater_than":
+      text = `${ctx.gt} dan katta bo'lishi kerak`;
+      break;
+    case "greater_than_equal":
+      text = `kamida ${ctx.ge} bo'lishi kerak`;
+      break;
+    case "less_than_equal":
+      text = `ko'pi bilan ${ctx.le} bo'lishi kerak`;
+      break;
+    case "int_parsing":
+    case "int_type":
+      text = "butun son bo'lishi kerak";
       break;
     case "value_error":
       text = String(item.msg || "").replace(/^Value error,\s*/, "");

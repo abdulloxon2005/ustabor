@@ -4,12 +4,12 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#2563eb" />
-  <title>UstaBor</title>
+  <title>Asosiy - UstaBor</title>
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
   <header class="app-header">
-    <span class="brand">UstaBor</span>
+    <a class="brand" href="index.html">UstaBor</a>
     <div id="header-actions" class="header-actions">
       <a id="header-login" class="btn btn-outline" href="login.html">Kirish</a>
       <a id="header-register" class="btn" href="register.html">Ro'yxatdan o'tish</a>
@@ -23,10 +23,10 @@
       <a id="hero-btn" class="btn btn-accent" href="masters.html">Buyurtma berish</a>
     </section>
 
-    <p id="status" class="muted">Server tekshirilmoqda...</p>
+    <p id="status" class="muted" aria-live="polite">Server tekshirilmoqda...</p>
 
     <h2 id="categories">Xizmatlar</h2>
-    <p id="cat-state" class="muted">Yuklanmoqda...</p>
+    <p id="cat-state" class="muted" aria-live="polite">Yuklanmoqda...</p>
     <div id="cat-err-box" style="display:none; margin-bottom:12px;">
       <button id="cat-retry-btn" class="btn btn-outline" type="button">Qayta urinish</button>
     </div>
@@ -39,7 +39,6 @@
   <script>
     renderNav("home");
 
-    // Foydalanuvchi kirganmi?
     const curUser = getUser();
     const headerActions = document.getElementById("header-actions");
     const heroBtn = document.getElementById("hero-btn");
@@ -60,23 +59,25 @@
         heroBtn.textContent = "Usta paneli";
       } else if (curUser.role === "admin") {
         heroBtn.href = "admin.html";
-        heroBtn.textContent = "Admin panel";
+        heroBtn.textContent = "Boshqaruv paneli";
       }
     }
 
-    // Server holati
-    const el = document.getElementById("status");
-    apiFetch("/health")
-      .then((d) => {
-        el.textContent = "Server ishlayapti: " + d.status;
-        el.className = "ok";
-      })
-      .catch((e) => {
-        el.textContent = "Serverga ulanib bo'lmadi: " + e.message;
-        el.className = "err";
-      });
+    const statusEl = document.getElementById("status");
+    function checkHealth() {
+      statusEl.textContent = "Server tekshirilmoqda...";
+      statusEl.className = "muted";
+      apiFetch("/health")
+        .then(() => {
+          statusEl.textContent = "Server ishlayapti";
+          statusEl.className = "ok";
+        })
+        .catch((e) => {
+          statusEl.textContent = e.message;
+          statusEl.className = "err";
+        });
+    }
 
-    // Kategoriyalar
     const catState = document.getElementById("cat-state");
     const catErrBox = document.getElementById("cat-err-box");
     const catRetryBtn = document.getElementById("cat-retry-btn");
@@ -87,10 +88,12 @@
       catState.textContent = "Yuklanmoqda...";
       catState.className = "muted";
       catErrBox.style.display = "none";
+      catRetryBtn.disabled = true;
       catGrid.replaceChildren();
 
       apiFetch("/categories")
         .then((list) => {
+          catRetryBtn.disabled = false;
           if (!list.length) {
             catState.textContent = "Hozircha xizmatlar yo'q";
             return;
@@ -99,7 +102,6 @@
           list.forEach((c) => {
             const a = document.createElement("a");
             a.className = "card category-card";
-            // Kirgan customer buyurtma sahifasiga, aks holda ustalar ro'yxatiga
             if (curUser && curUser.role === "customer" && getToken()) {
               a.href = "create-order.html?category_id=" + encodeURIComponent(c.id);
             } else {
@@ -110,13 +112,19 @@
           });
         })
         .catch((e) => {
+          catRetryBtn.disabled = false;
           catState.textContent = "Xizmatlarni yuklab bo'lmadi: " + e.message;
           catState.className = "err";
           catErrBox.style.display = "block";
         });
     }
 
-    catRetryBtn.addEventListener("click", () => loadCategories());
+    catRetryBtn.addEventListener("click", () => {
+      checkHealth();
+      loadCategories();
+    });
+
+    checkHealth();
     loadCategories();
   </script>
 </body>
