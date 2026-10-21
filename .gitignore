@@ -13,6 +13,7 @@ __pycache__/
 # Baza
 *.db
 *.sqlite3
+backups/
 
 # Tizim / muharrir
 .DS_Store
