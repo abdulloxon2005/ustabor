@@ -824,7 +824,7 @@
 
           commPrevBtn.disabled = commOffset === 0;
           commNextBtn.disabled = orders.length < COMM_LIMIT;
-          commPageInfo.textContent = (commOffset + 1) + " – " + (ordersOffset + orders.length);
+          commPageInfo.textContent = (commOffset + 1) + " – " + (commOffset + orders.length);
         } catch (err) {
           commRetryBtn.disabled = false;
           commFilterBtn.disabled = false;

@@ -44,6 +44,25 @@ class RegisterRequest(BaseModel):
             raise ValueError("Ism kamida 2 ta belgidan iborat bo'lishi kerak")
         return v
 
+    @field_validator("password")
+    @classmethod
+    def _password(cls, v: str) -> str:
+        if not any(c.isalpha() for c in v) or not any(c.isdigit() for c in v):
+            raise ValueError("Parol kamida bitta harf va bitta raqamdan iborat bo'lishi kerak")
+        return v
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(min_length=1, max_length=128)
+    new_password: str = Field(min_length=8, max_length=72)
+
+    @field_validator("new_password")
+    @classmethod
+    def _new_password(cls, v: str) -> str:
+        if not any(c.isalpha() for c in v) or not any(c.isdigit() for c in v):
+            raise ValueError("Yangi parol kamida bitta harf va bitta raqamdan iborat bo'lishi kerak")
+        return v
+
 
 class LoginRequest(BaseModel):
     phone: str

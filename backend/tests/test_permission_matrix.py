@@ -35,6 +35,7 @@ PERMISSION_TABLE: dict[tuple[str, str], str | set[str]] = {
     ("GET", "/api/v1/masters/{master_id}/reviews"): "public",
     # Authenticated (all active roles)
     ("GET", "/api/v1/auth/me"): {"customer", "master", "admin"},
+    ("POST", "/api/v1/auth/change-password"): {"customer", "master", "admin"},
     # Master routes
     ("POST", "/api/v1/masters/profile"): {"master"},
     ("GET", "/api/v1/masters/me"): {"master"},
@@ -230,6 +231,10 @@ def _render_request(
         ("POST", "/api/v1/auth/login"): {
             "phone": "+998901000001",
             "password": "secret123",
+        },
+        ("POST", "/api/v1/auth/change-password"): {
+            "current_password": "secret123",
+            "new_password": "newpassword123",
         },
         ("POST", "/api/v1/masters/profile"): {
             "bio": "Usta bio",

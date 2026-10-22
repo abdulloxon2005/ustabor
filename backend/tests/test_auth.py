@@ -6,6 +6,7 @@ from fastapi import Depends
 
 from app import models
 from app.api.deps import require_role
+from app.api.v1.auth import _failed_attempts
 from app.core.config import settings
 from app.core.security import create_access_token, decode_access_token
 from app.main import app
@@ -15,6 +16,7 @@ from app.schemas.auth import normalize_phone
 REGISTER = "/api/v1/auth/register"
 LOGIN = "/api/v1/auth/login"
 ME = "/api/v1/auth/me"
+CHANGE_PASSWORD = "/api/v1/auth/change-password"
 
 CUSTOMER = {
     "phone": "+998901234567",
@@ -22,6 +24,13 @@ CUSTOMER = {
     "full_name": "Ali Valiyev",
     "role": "customer",
 }
+
+
+@pytest.fixture(autouse=True)
+def clean_failed_attempts():
+    _failed_attempts.clear()
+    yield
+    _failed_attempts.clear()
 
 
 def register(client, **overrides):
@@ -98,6 +107,8 @@ def test_normalize_phone_bad(raw):
         {"phone": "salom"},
         {"password": "short"},
         {"password": "x" * 73},
+        {"password": "onlyletters"},
+        {"password": "12345678"},
         {"full_name": "A"},
         {"full_name": "x" * 121},
         {"role": "superuser"},
@@ -152,6 +163,23 @@ def test_admin_can_login(client, make_admin):
     r = client.post(LOGIN, json={"phone": "+998900000000", "password": "admin12345"})
     assert r.status_code == 200
     assert r.json()["user"]["role"] == "admin"
+
+
+def test_login_rate_limiting_blocks_after_five_failed_attempts(client):
+    register(client)
+    # Dastlabki 5 ta xato urinish -> 401
+    for _ in range(5):
+        r = client.post(LOGIN, json={"phone": CUSTOMER["phone"], "password": "wrongpass1"})
+        assert r.status_code == 401
+
+    # 6-urinish -> 429 Too Many Requests
+    r = client.post(LOGIN, json={"phone": CUSTOMER["phone"], "password": "wrongpass1"})
+    assert r.status_code == 429
+    assert "Juda ko'p" in r.json()["detail"]
+
+    # Hatto to'g'ri parol kiritilsa ham vaqtinchalik bloklanadi
+    r = client.post(LOGIN, json={"phone": CUSTOMER["phone"], "password": CUSTOMER["password"]})
+    assert r.status_code == 429
 
 
 # ---------- /me ----------
@@ -211,6 +239,81 @@ def test_token_contains_only_sub_and_exp():
         create_access_token(7), settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
     )
     assert set(payload) == {"sub", "exp"}
+
+
+# ---------- change-password ----------
+
+def test_change_password_unauthorized(client):
+    r = client.post(
+        CHANGE_PASSWORD,
+        json={"current_password": "oldPassword1", "new_password": "newPassword2"},
+    )
+    assert r.status_code == 401
+
+
+def test_change_password_success(client, auth_header):
+    token = register(client).json()["access_token"]
+    r = client.post(
+        CHANGE_PASSWORD,
+        headers=auth_header(token),
+        json={"current_password": "secret123", "new_password": "newSecret456"},
+    )
+    assert r.status_code == 200
+    assert r.json()["detail"] == "Parol muvaffaqiyatli o'zgartirildi"
+
+    # Eski parol bilan login qilib bo'lmaydi
+    old_login = client.post(
+        LOGIN, json={"phone": CUSTOMER["phone"], "password": "secret123"}
+    )
+    assert old_login.status_code == 401
+
+    # Yangi parol bilan login ishlaydi
+    new_login = client.post(
+        LOGIN, json={"phone": CUSTOMER["phone"], "password": "newSecret456"}
+    )
+    assert new_login.status_code == 200
+    assert new_login.json()["access_token"]
+
+
+def test_change_password_wrong_current(client, auth_header):
+    token = register(client).json()["access_token"]
+    r = client.post(
+        CHANGE_PASSWORD,
+        headers=auth_header(token),
+        json={"current_password": "wrongPassword9", "new_password": "newSecret456"},
+    )
+    assert r.status_code == 400
+    assert r.json()["detail"] == "Joriy parol noto'g'ri"
+
+
+def test_change_password_same_as_current(client, auth_header):
+    token = register(client).json()["access_token"]
+    r = client.post(
+        CHANGE_PASSWORD,
+        headers=auth_header(token),
+        json={"current_password": "secret123", "new_password": "secret123"},
+    )
+    assert r.status_code == 400
+    assert "bir xil" in r.json()["detail"]
+
+
+@pytest.mark.parametrize(
+    "bad_new_password",
+    [
+        "short",             # < 8
+        "onlylettershere",   # raqam yo'q
+        "1234567890",        # harf yo'q
+        "x" * 73,            # > 72
+    ],
+)
+def test_change_password_complexity_rejected(client, auth_header, bad_new_password):
+    token = register(client).json()["access_token"]
+    r = client.post(
+        CHANGE_PASSWORD,
+        headers=auth_header(token),
+        json={"current_password": "secret123", "new_password": bad_new_password},
+    )
+    assert r.status_code == 422
 
 
 # ---------- require_role ----------

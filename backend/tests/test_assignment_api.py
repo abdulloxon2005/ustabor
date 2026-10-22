@@ -706,3 +706,62 @@ def test_acceptance_flow_automatic_and_manual(client, db, signup, santexnik_cat)
     r_man_check = client.get(f"{ORDERS_URL}/{man_id}", headers=h_cust)
     assert r_man_check.json()["offers"][0]["status"] == "rejected"
 
+
+def test_automatic_order_rotates_on_expiry_via_api(client, db, signup, santexnik_cat):
+    """Taklif muddati o'tganda GET /orders/{id} orqali tizim navbatdagi ustaga avtomatik taklif beradi."""
+    h_cust, u_cust = signup("customer", "+998901112233", "Mijoz Avto")
+
+    # 2 ta usta (biri Chilonzorda, biri Yunusobodda)
+    h_m1, u_m1 = signup("master", "+998902223344", "Usta Bir")
+    mp1 = _create_master_profile(db, u_m1["id"], city="Toshkent", district="Chilonzor")
+    _add_service(db, mp1.id, santexnik_cat.id)
+
+    h_m2, u_m2 = signup("master", "+998902223355", "Usta Ikki")
+    mp2 = _create_master_profile(db, u_m2["id"], city="Toshkent", district="Yunusobod")
+    _add_service(db, mp2.id, santexnik_cat.id)
+
+    # Buyurtma yaratamiz (avtomatik)
+    r_ord = client.post(
+        ORDERS_URL,
+        json={
+            "category_id": santexnik_cat.id,
+            "description": "Quvur ta'mirlash",
+            "city": "Toshkent",
+            "district": "Chilonzor",
+            "address": "Chilonzor 5-mavze",
+            "selection_mode": "automatic",
+        },
+        headers=h_cust,
+    )
+    assert r_ord.status_code == 201
+    ord_data = r_ord.json()
+    order_id = ord_data["id"]
+
+    # 1-usta (Chilonzordagi usta_bir) taklif olgan
+    assert ord_data["offers"][0]["master_id"] == mp1.id
+    assert ord_data["offers"][0]["status"] == "pending"
+
+    # Taklifning muddatini o'tgan qilib belgilaymiz
+    offer_obj = db.scalar(select(models.OrderOffer).where(models.OrderOffer.order_id == order_id))
+    offer_obj.expires_at = datetime.now(timezone.utc) - timedelta(minutes=5)
+    db.commit()
+
+    # Mijoz GET /orders/{order_id} qiladi
+    # Tizim avtomatik tarzda:
+    # 1. 1-ustaning taklifini EXPIRED qiladi
+    # 2. 2-ustaga yangi PENDING taklif jo'natadi
+    r_check = client.get(f"{ORDERS_URL}/{order_id}", headers=h_cust)
+    assert r_check.status_code == 200
+    offers = r_check.json()["offers"]
+    assert len(offers) == 2
+    assert offers[0]["master_id"] == mp1.id
+    assert offers[0]["status"] == "expired"
+    assert offers[1]["master_id"] == mp2.id
+    assert offers[1]["status"] == "pending"
+
+    # 2-usta o'z dashboardida (`/masters/me/orders`) taklifni ko'radi
+    m2_orders = client.get("/api/v1/masters/me/orders", headers=h_m2).json()
+    assert len(m2_orders["pending_offers"]) == 1
+    assert m2_orders["pending_offers"][0]["order_id"] == order_id
+
+

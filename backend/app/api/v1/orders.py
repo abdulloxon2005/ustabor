@@ -238,7 +238,7 @@ def list_orders(
     user: User = Depends(require_role(Role.CUSTOMER)),
     db: Session = Depends(get_db),
 ):
-    matching.expire_stale_offers(db)
+    matching.rotate_stale_automatic_orders(db)
     db.commit()
 
     limit = min(max(limit, 1), 100)
@@ -270,7 +270,7 @@ def get_order(
     db: Session = Depends(get_db),
 ):
     db.expire_all()
-    matching.expire_stale_offers(db)
+    matching.rotate_stale_automatic_orders(db)
     db.commit()
     order = _own_order(order_id, user, db)
     return _order_detail_out(order, db)

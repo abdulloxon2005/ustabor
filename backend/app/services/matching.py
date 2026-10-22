@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import settings
 from app.models import MasterProfile, MasterService, Order, OrderOffer, Review, User
-from app.models.enums import OfferStatus
+from app.models.enums import OfferStatus, OrderStatus, SelectionMode
 
 
 # ---------- Bayes reyting ----------
@@ -170,6 +170,8 @@ def expire_stale_offers(db: Session, order: Order | None = None) -> int:
     if order is not None:
         stmt = stmt.where(OrderOffer.order_id == order.id)
     result = db.execute(stmt)
+    if result.rowcount > 0:
+        db.expire_all()
     return result.rowcount
 
 
@@ -185,7 +187,7 @@ def _already_offered_ids(db: Session, order: Order) -> set[int]:
 def offer_next(
     db: Session,
     order: Order,
-    actor: User,
+    actor: User | None = None,
 ) -> OrderOffer | None:
     """Automatic rejim: navbatdagi eng yaxshi ustaga taklif yuboradi.
 
@@ -199,3 +201,34 @@ def offer_next(
     if top is None:
         return None
     return create_offer(db, order, top)
+
+
+def rotate_stale_automatic_orders(db: Session, order: Order | None = None) -> int:
+    """Muddati o'tgan takliflarni tozalaydi va faol (PENDING) taklifi qolmagan
+    automatic qidiruvdagi buyurtmalarga navbatdagi ustani biriktiradi.
+    COMMIT QILMAYDI. Qaytaradi: yangi yaratilgan takliflar soni.
+    """
+    expire_stale_offers(db, order)
+
+    stmt = (
+        select(Order)
+        .where(
+            Order.status == OrderStatus.SEARCHING,
+            Order.selection_mode == SelectionMode.AUTOMATIC,
+        )
+        .options(selectinload(Order.offers))
+    )
+    if order is not None:
+        stmt = stmt.where(Order.id == order.id)
+
+    auto_orders = db.scalars(stmt).all()
+    count = 0
+    for ord_obj in auto_orders:
+        has_pending = any(
+            o.status == OfferStatus.PENDING for o in (ord_obj.offers or [])
+        )
+        if not has_pending:
+            new_off = offer_next(db, ord_obj)
+            if new_off is not None:
+                count += 1
+    return count

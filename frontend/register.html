@@ -37,7 +37,7 @@
       <input id="phone" name="phone" type="tel" inputmode="tel" autocomplete="tel"
              placeholder="+998 90 123 45 67" required />
 
-      <label for="password">Parol (kamida 8 ta belgi)</label>
+      <label for="password">Parol (kamida 8 ta belgi, harf va raqam)</label>
       <input id="password" name="password" type="password"
              autocomplete="new-password" minlength="8" maxlength="72" required />
 
@@ -78,6 +78,10 @@
       }
       if (payload.password.length < 8) {
         errorEl.textContent = "Parol kamida 8 ta belgidan iborat bo'lishi kerak";
+        return;
+      }
+      if (!/[a-zA-Z]/.test(payload.password) || !/\d/.test(payload.password)) {
+        errorEl.textContent = "Parolda kamida bitta harf va bitta raqam bo'lishi kerak";
         return;
       }
 

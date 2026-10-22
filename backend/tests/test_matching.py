@@ -381,3 +381,64 @@ class TestOfferNext:
 
         result = matching.offer_next(db, order, customer)
         assert result is None
+
+    def test_rotate_stale_automatic_orders_dispatches_next(self, db):
+        """Taklif muddati o'tganda rotate_stale_automatic_orders navbatdagi ustaga taklif beradi."""
+        cat = _category(db)
+        customer = _user(db, "+998900000001", role=Role.CUSTOMER)
+        order = _order(db, customer, cat)
+
+        # 2 ta usta (Master A yuqori reyting, Master B pastroq)
+        u1 = _user(db, "+998900000002")
+        mp1 = _master(db, u1, rating_avg=4.9, rating_count=20)
+        _service(db, mp1, cat)
+
+        u2 = _user(db, "+998900000003")
+        mp2 = _master(db, u2, rating_avg=4.0, rating_count=10)
+        _service(db, mp2, cat)
+
+        db.commit()
+
+        # Dastlab Master A ga taklif
+        first_offer = matching.offer_next(db, order)
+        assert first_offer is not None
+        assert first_offer.master_id == mp1.id
+        assert first_offer.status == OfferStatus.PENDING
+        db.commit()
+
+        # Master A taklifining muddati o'tgan deb simulyatsiya qilamiz
+        first_offer.expires_at = datetime.now(timezone.utc) - timedelta(minutes=10)
+        db.commit()
+
+        # rotate_stale_automatic_orders chaqirilganda:
+        # 1. Master A taklifi EXPIRED bo'ladi
+        # 2. Master B ga yangi PENDING taklif yuboriladi
+        rotated_count = matching.rotate_stale_automatic_orders(db, order)
+        db.commit()
+
+        assert rotated_count == 1
+        db.refresh(first_offer)
+        assert first_offer.status == OfferStatus.EXPIRED
+
+        # Yangi taklif Master B ga biriktirilgan
+        active_offer = db.scalar(
+            select(models.OrderOffer).where(
+                models.OrderOffer.order_id == order.id,
+                models.OrderOffer.status == OfferStatus.PENDING,
+            )
+        )
+        assert active_offer is not None
+        assert active_offer.master_id == mp2.id
+
+        # Endi Master B ning ham muddati o'tsin
+        active_offer.expires_at = datetime.now(timezone.utc) - timedelta(minutes=10)
+        db.commit()
+
+        # Qayta aylantirish: boshqa usta yo'q -> 0 qaytadi, yangi taklif bo'lmaydi
+        rotated_count2 = matching.rotate_stale_automatic_orders(db, order)
+        db.commit()
+
+        assert rotated_count2 == 0
+        db.refresh(active_offer)
+        assert active_offer.status == OfferStatus.EXPIRED
+        assert order.status == OrderStatus.SEARCHING

@@ -137,6 +137,8 @@ function requireAuth(roles) {
 const FIELD_LABELS = {
   phone: "Telefon",
   password: "Parol",
+  current_password: "Joriy parol",
+  new_password: "Yangi parol",
   full_name: "Ism",
   role: "Rol",
   bio: "Ma'lumot",

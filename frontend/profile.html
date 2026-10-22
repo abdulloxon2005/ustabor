@@ -38,6 +38,22 @@
       <a class="btn btn-outline btn-block" href="my-orders.html" style="margin-bottom: 10px;">Buyurtmalarim</a>
       <button id="logoutBtn" class="btn btn-danger btn-block" type="button">Chiqish</button>
     </div>
+
+    <!-- Parolni o'zgartirish formasi -->
+    <form id="changePasswordForm" class="card" style="display: none; margin-top: 16px;" novalidate>
+      <h2 style="margin-top: 0;">Parolni o'zgartirish</h2>
+
+      <label for="currentPassword">Joriy parol</label>
+      <input id="currentPassword" name="current_password" type="password" autocomplete="current-password" required />
+
+      <label for="newPassword">Yangi parol (kamida 8 ta belgi, harf va raqam)</label>
+      <input id="newPassword" name="new_password" type="password" autocomplete="new-password" minlength="8" maxlength="72" required />
+
+      <div id="passwordError" class="form-error" role="alert"></div>
+      <div id="passwordSuccess" class="form-success" aria-live="polite"></div>
+
+      <button id="changePasswordBtn" class="btn btn-block" type="submit" style="margin-top: 12px;">Parolni o'zgartirish</button>
+    </form>
   </main>
 
   <nav class="bottom-nav"></nav>

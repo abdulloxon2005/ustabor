@@ -197,6 +197,10 @@
             offerStateEl.textContent = "Usta rad etdi";
             offerStateEl.style.color = "var(--err)";
             card.appendChild(offerStateEl);
+          } else if (latestOffer && latestOffer.status === "expired") {
+            offerStateEl.textContent = "Taklif muddati tugadi (usta javob bermadi)";
+            offerStateEl.style.color = "var(--muted)";
+            card.appendChild(offerStateEl);
           }
 
           if (o.selection_mode === "manual" && !hasPending) {
@@ -212,6 +216,13 @@
             });
             chooseLink.href = "masters.html?" + q.toString();
             card.appendChild(chooseLink);
+          } else if (o.selection_mode === "automatic" && !hasPending && offers.length) {
+            const noMasterP = document.createElement("p");
+            noMasterP.className = "muted";
+            noMasterP.style.fontSize = "0.85rem";
+            noMasterP.style.margin = "8px 0 0";
+            noMasterP.textContent = "Barcha mos ustalarga taklif yuborildi, hozircha yangi usta topilmadi. Buyurtmani bekor qilib qayta urinishingiz mumkin.";
+            card.appendChild(noMasterP);
           }
         }
 

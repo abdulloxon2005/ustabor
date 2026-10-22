@@ -47,6 +47,8 @@
           <strong>Biriktirilgan usta:</strong> <span id="masterName"></span>
         </p>
 
+        <div id="orderNoteBox" style="display: none; margin-top: 10px;"></div>
+
         <!-- Narx bloki -->
         <div id="priceSection" style="margin-top: 12px;"></div>
 
@@ -392,6 +394,20 @@
           addressTextEl.textContent = order.city + ", " + order.district + ", " + order.address;
           createdTextEl.textContent = formatDate(order.created_at);
           masterNameEl.textContent = order.master_name || "Biriktirilmagan";
+
+          const orderNoteBox = document.getElementById("orderNoteBox");
+          const hasPendingOffer = (order.offers || []).some((o) => o.status === "pending");
+          if (order.status === "searching" && order.selection_mode === "automatic" && !hasPendingOffer && (order.offers || []).length) {
+            orderNoteBox.className = "status-banner pending";
+            orderNoteBox.style.display = "block";
+            orderNoteBox.textContent = "Barcha mos ustalarga taklif yuborildi, hozircha yangi usta topilmadi. Buyurtmani bekor qilib qayta urinishingiz mumkin.";
+          } else if (order.note) {
+            orderNoteBox.className = "status-banner pending";
+            orderNoteBox.style.display = "block";
+            orderNoteBox.textContent = order.note;
+          } else {
+            orderNoteBox.style.display = "none";
+          }
 
           renderPriceBlock(order);
           renderTimeline(order.history);
