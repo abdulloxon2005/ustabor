@@ -64,6 +64,8 @@ PERMISSION_TABLE: dict[tuple[str, str], str | set[str]] = {
     ("POST", "/api/v1/orders/{order_id}/review"): {"customer"},
     ("POST", "/api/v1/orders/{order_id}/photos"): {"customer"},
     ("DELETE", "/api/v1/orders/{order_id}/photos/{photo_id}"): {"customer"},
+    ("GET", "/api/v1/orders/{order_id}/messages"): {"customer", "master", "admin"},
+    ("POST", "/api/v1/orders/{order_id}/messages"): {"customer", "master"},
     # Master order action routes
     ("POST", "/api/v1/orders/{order_id}/accept"): {"master"},
     ("POST", "/api/v1/orders/{order_id}/reject"): {"master"},
@@ -283,6 +285,9 @@ def _render_request(
         ("POST", "/api/v1/orders/{order_id}/review"): {
             "rating": 5,
             "comment": "A'lo darajada",
+        },
+        ("POST", "/api/v1/orders/{order_id}/messages"): {
+            "body": "Qachon kelasiz?",
         },
         ("POST", "/api/v1/admin/categories"): {
             "name": "Elektrik",

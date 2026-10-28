@@ -61,6 +61,9 @@
         </button>
       </div>
 
+      <!-- Chat -->
+      <div id="chatCard" class="card" style="display: none;"></div>
+
       <!-- Holat tarixi (Timeline) -->
       <div class="card">
         <h2 style="margin-top: 0;">Holat tarixi</h2>
@@ -103,6 +106,8 @@
       const masterNameEl = document.getElementById("masterName");
       const priceSectionEl = document.getElementById("priceSection");
       const photosSectionEl = document.getElementById("photosSection");
+      const chatCardEl = document.getElementById("chatCard");
+      let chatWidget = null;
       const cancelBtn = document.getElementById("cancelBtn");
       const timelineListEl = document.getElementById("timelineList");
       const reviewSectionEl = document.getElementById("reviewSection");
@@ -487,6 +492,19 @@
           }
 
           renderPhotos(order);
+
+          if (order.master_id) {
+            chatCardEl.style.display = "block";
+            if (chatWidget) {
+              chatWidget.reload();
+            } else {
+              chatWidget = createChatWidget(order.id, user.id);
+              chatCardEl.replaceChildren(chatWidget.el);
+            }
+          } else {
+            chatCardEl.style.display = "none";
+          }
+
           renderPriceBlock(order);
           renderTimeline(order.history);
           renderReviewBlock(order);

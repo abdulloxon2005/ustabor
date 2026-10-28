@@ -122,3 +122,123 @@ function startPolling(fn, ms) {
     document.removeEventListener("visibilitychange", onVisibilityChange);
   };
 }
+
+// Buyurtma chatini (GET/POST /orders/{id}/messages) ko'rsatuvchi widget.
+// Qaytaradi: { el, reload } — el DOM'ga qo'shiladi, reload() fon yangilanishida chaqiriladi.
+function createChatWidget(orderId, currentUserId) {
+  const wrap = document.createElement("div");
+  wrap.className = "chat-widget";
+
+  const title = document.createElement("div");
+  title.style.fontWeight = "600";
+  title.style.margin = "10px 0 6px";
+  title.textContent = "Xabarlar";
+
+  const list = document.createElement("div");
+  list.style.display = "flex";
+  list.style.flexDirection = "column";
+  list.style.gap = "6px";
+  list.style.maxHeight = "240px";
+  list.style.overflowY = "auto";
+  list.style.marginBottom = "8px";
+  list.style.padding = "8px";
+  list.style.background = "var(--bg)";
+  list.style.borderRadius = "10px";
+
+  const form = document.createElement("form");
+  form.style.display = "flex";
+  form.style.gap = "8px";
+  form.noValidate = true;
+
+  const input = document.createElement("input");
+  input.type = "text";
+  input.maxLength = 2000;
+  input.placeholder = "Xabar yozing...";
+  input.style.flex = "1";
+  input.style.margin = "0";
+
+  const sendBtn = document.createElement("button");
+  sendBtn.type = "submit";
+  sendBtn.className = "btn";
+  sendBtn.style.width = "auto";
+  sendBtn.style.padding = "0 16px";
+  sendBtn.textContent = "Yuborish";
+
+  const errEl = document.createElement("div");
+  errEl.className = "form-error";
+  errEl.style.margin = "4px 0 0";
+  errEl.setAttribute("role", "alert");
+
+  form.append(input, sendBtn);
+  wrap.append(title, list, form, errEl);
+
+  async function load() {
+    let items;
+    try {
+      items = await apiFetch("/orders/" + orderId + "/messages");
+    } catch (e) {
+      return; // fon rejimida xatolikni jim o'tkazib yuboramiz
+    }
+    list.replaceChildren();
+    if (!items.length) {
+      const empty = document.createElement("p");
+      empty.className = "muted";
+      empty.style.margin = "0";
+      empty.textContent = "Hali xabar yo'q";
+      list.appendChild(empty);
+      return;
+    }
+    items.forEach((m) => {
+      const mine = m.sender_id === currentUserId;
+      const bubble = document.createElement("div");
+      bubble.style.alignSelf = mine ? "flex-end" : "flex-start";
+      bubble.style.maxWidth = "80%";
+      bubble.style.padding = "6px 10px";
+      bubble.style.borderRadius = "12px";
+      bubble.style.background = mine ? "var(--primary)" : "#fff";
+      bubble.style.color = mine ? "#fff" : "var(--text)";
+      bubble.style.border = mine ? "0" : "1px solid var(--border)";
+      bubble.style.fontSize = "0.9rem";
+      bubble.style.overflowWrap = "anywhere";
+
+      const nameEl = document.createElement("div");
+      nameEl.style.fontSize = "0.7rem";
+      nameEl.style.opacity = "0.75";
+      nameEl.style.fontWeight = "600";
+      nameEl.textContent = mine ? "Siz" : m.sender_name;
+
+      const bodyEl = document.createElement("div");
+      bodyEl.textContent = m.body;
+
+      bubble.append(nameEl, bodyEl);
+      list.appendChild(bubble);
+    });
+    list.scrollTop = list.scrollHeight;
+  }
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    errEl.textContent = "";
+    const body = input.value.trim();
+    if (!body) return;
+    input.disabled = true;
+    sendBtn.disabled = true;
+    try {
+      await apiFetch("/orders/" + orderId + "/messages", {
+        method: "POST",
+        body: JSON.stringify({ body }),
+      });
+      input.value = "";
+      await load();
+    } catch (err) {
+      errEl.textContent = err.message;
+    } finally {
+      input.disabled = false;
+      sendBtn.disabled = false;
+      input.focus();
+    }
+  });
+
+  load();
+  return { el: wrap, reload: load };
+}

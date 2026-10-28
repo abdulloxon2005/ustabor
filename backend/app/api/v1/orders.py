@@ -4,11 +4,12 @@ from fastapi import APIRouter, Depends, File, HTTPException, Path, Query, Upload
 from sqlalchemy import exists, func, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.api.deps import require_role
+from app.api.deps import get_current_user, require_role
 from app.core.config import MAX_DB_INT, settings
 from app.db.session import get_db
-from app.models import Category, MasterProfile, MasterService, Order, OrderOffer, OrderPhoto, OrderStatusHistory, Quote, Review, User
+from app.models import Category, MasterProfile, MasterService, Order, OrderMessage, OrderOffer, OrderPhoto, OrderStatusHistory, Quote, Review, User
 from app.models.enums import OfferStatus, OrderStatus, Role, SelectionMode
+from app.schemas.message import MessageIn, MessageOut
 from app.schemas.order import (
     OfferOut,
     OrderCompleteOut,
@@ -696,4 +697,100 @@ def delete_order_photo(
     db.delete(photo)
     db.commit()
     return {"detail": "Rasm o'chirildi"}
+
+
+# ---------- Chat ----------
+
+CHAT_NOT_FOUND = "Buyurtma topilmadi"
+CHAT_FORBIDDEN = "Bu amal uchun ruxsat yo'q"
+CHAT_NOT_OPEN = "Chat faqat usta biriktirilgandan keyin ochiladi"
+
+
+def _order_for_messages(order_id: int, user: User, db: Session) -> tuple[Order, bool]:
+    """Qaytaradi: (order, can_write). Mijoz/biriktirilgan usta o'qiy/yoza oladi,
+    admin faqat o'qiy oladi. Ruxsat yo'q yoki topilmasa -> 404."""
+    order = db.get(Order, order_id)
+    if order is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, CHAT_NOT_FOUND)
+
+    if user.role == Role.CUSTOMER:
+        if order.customer_id != user.id:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, CHAT_NOT_FOUND)
+        return order, True
+
+    if user.role == Role.MASTER:
+        profile = db.scalar(select(MasterProfile).where(MasterProfile.user_id == user.id))
+        if profile is None or order.master_id != profile.id:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, CHAT_NOT_FOUND)
+        return order, True
+
+    if user.role == Role.ADMIN:
+        return order, False
+
+    raise HTTPException(status.HTTP_403_FORBIDDEN, CHAT_FORBIDDEN)
+
+
+@router.get("/{order_id}/messages", response_model=list[MessageOut])
+def list_order_messages(
+    order_id: int = Path(..., le=MAX_DB_INT),
+    limit: int = 50,
+    offset: int = Query(default=0, le=MAX_DB_INT),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    order, _ = _order_for_messages(order_id, user, db)
+
+    limit = min(max(limit, 1), 200)
+    offset = min(max(offset, 0), MAX_DB_INT)
+
+    rows = db.execute(
+        select(OrderMessage, User.full_name)
+        .join(User, OrderMessage.sender_id == User.id)
+        .where(OrderMessage.order_id == order.id)
+        .order_by(OrderMessage.id.asc())
+        .offset(offset)
+        .limit(limit)
+    ).all()
+
+    return [
+        MessageOut(
+            id=m.id,
+            order_id=m.order_id,
+            sender_id=m.sender_id,
+            sender_name=name,
+            body=m.body,
+            created_at=m.created_at,
+        )
+        for m, name in rows
+    ]
+
+
+@router.post(
+    "/{order_id}/messages", response_model=MessageOut, status_code=status.HTTP_201_CREATED
+)
+def create_order_message(
+    data: MessageIn,
+    order_id: int = Path(..., le=MAX_DB_INT),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    order, can_write = _order_for_messages(order_id, user, db)
+    if not can_write:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, CHAT_FORBIDDEN)
+    if order.master_id is None:
+        raise HTTPException(status.HTTP_409_CONFLICT, CHAT_NOT_OPEN)
+
+    msg = OrderMessage(order_id=order.id, sender_id=user.id, body=data.body)
+    db.add(msg)
+    db.commit()
+    db.refresh(msg)
+
+    return MessageOut(
+        id=msg.id,
+        order_id=msg.order_id,
+        sender_id=msg.sender_id,
+        sender_name=user.full_name,
+        body=msg.body,
+        created_at=msg.created_at,
+    )
 

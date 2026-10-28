@@ -396,6 +396,9 @@
           card.appendChild(completeBtn);
         }
 
+        const chatWidget = createChatWidget(order.id, user.id);
+        card.appendChild(chatWidget.el);
+
         return card;
       }
 
