@@ -30,7 +30,7 @@ from app.schemas.category import CategoryCreate, CategoryOut, CategoryUpdate, sl
 from app.schemas.master import ApprovalIn, ApprovalOut
 from app.schemas.order import HistoryOut, OfferOut
 from app.schemas.quote import QuoteOut
-from app.services import admin_ops
+from app.services import admin_ops, notify
 from app.services.order_flow import transition
 
 # Router darajasida: admindan boshqa hech kim kira olmaydi
@@ -199,6 +199,14 @@ def set_master_approval(
     if profile is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Usta topilmadi")
     profile.is_approved = data.is_approved
+    if data.is_approved:
+        notify.notify_user(
+            db,
+            profile.user_id,
+            "master_approved",
+            "Profilingiz tasdiqlandi",
+            "Endi mijozlarga ko'rinasiz va buyurtmalar qabul qila olasiz",
+        )
     db.commit()
     db.refresh(profile)
     return profile

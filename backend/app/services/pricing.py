@@ -18,7 +18,7 @@ from app.models.enums import (
     QuoteStatus,
     Role,
 )
-from app.services import order_flow
+from app.services import notify, order_flow
 
 PRICE_ALREADY_CONFIRMED_OR_CHANGED = (
     "Narx allaqachon tasdiqlangan yoki buyurtma holati o'zgargan"
@@ -192,6 +192,18 @@ def accept_quote(
     db.expire_all()
     db.refresh(order)
     db.refresh(quote)
+
+    master_profile = db.get(MasterProfile, quote.master_id)
+    if master_profile is not None:
+        notify.notify_user(
+            db,
+            master_profile.user_id,
+            "quote_accepted",
+            "Narx taklifi qabul qilindi",
+            f"#{order.id} buyurtma uchun taklif qilingan narx tasdiqlandi: {quote.price} so'm",
+            order_id=order.id,
+        )
+
     return order
 
 
@@ -298,4 +310,14 @@ def complete_order(db: Session, order: Order, actor: User) -> Order:
     )
     db.add(payment)
     db.flush()
+
+    notify.notify_user(
+        db,
+        order.customer_id,
+        "order_completed",
+        "Xizmat yakunlandi",
+        f"#{order.id} buyurtma yakunlandi. Sharh qoldirishni unutmang!",
+        order_id=order.id,
+    )
+
     return order

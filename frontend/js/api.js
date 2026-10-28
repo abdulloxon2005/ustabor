@@ -258,6 +258,7 @@ function renderNav(activeKey) {
   if (user && user.role === "master") {
     items = [
       { key: "dashboard", href: "master-dashboard.html", icon: "📋", label: "Takliflar" },
+      { key: "notifications", href: "notifications.html", icon: "🔔", label: "Bildirishnoma", badge: true },
       { key: "profile", href: "master-profile.html", icon: "👤", label: "Profil" },
       { key: "logout", href: "login.html", icon: "🚪", label: "Chiqish", onClick: logout },
     ];
@@ -265,11 +266,13 @@ function renderNav(activeKey) {
     items = [
       { key: "home", href: "index.html", icon: "🏠", label: "Asosiy" },
       { key: "orders", href: "my-orders.html", icon: "📋", label: "Buyurtmalar" },
+      { key: "notifications", href: "notifications.html", icon: "🔔", label: "Bildirishnoma", badge: true },
       { key: "profile", href: "profile.html", icon: "👤", label: "Profil" },
     ];
   } else if (user && user.role === "admin") {
     items = [
       { key: "home", href: "index.html", icon: "🏠", label: "Asosiy" },
+      { key: "notifications", href: "notifications.html", icon: "🔔", label: "Bildirishnoma", badge: true },
       { key: "admin", href: "admin.html", icon: "⚙️", label: "Admin" },
       { key: "logout", href: "login.html", icon: "🚪", label: "Chiqish", onClick: logout },
     ];
@@ -289,7 +292,17 @@ function renderNav(activeKey) {
     }
     const iconSpan = document.createElement("span");
     iconSpan.className = "icon";
+    iconSpan.style.position = "relative";
     iconSpan.textContent = item.icon;
+
+    if (item.badge) {
+      const badgeSpan = document.createElement("span");
+      badgeSpan.className = "nav-badge";
+      badgeSpan.id = "nav-badge";
+      badgeSpan.style.display = "none";
+      iconSpan.appendChild(badgeSpan);
+    }
+
     const labelNode = document.createTextNode(item.label);
     a.append(iconSpan, labelNode);
 
@@ -301,4 +314,31 @@ function renderNav(activeKey) {
     }
     nav.appendChild(a);
   });
+
+  if (user) {
+    refreshNavBadge();
+    if (!window.__navBadgePolling) {
+      window.__navBadgePolling = true;
+      if (typeof startPolling === "function") {
+        startPolling(refreshNavBadge, 20000);
+      }
+    }
+  }
+}
+
+async function refreshNavBadge() {
+  const badge = document.getElementById("nav-badge");
+  if (!badge || !getToken()) return;
+  try {
+    const data = await apiFetch("/notifications/unread-count");
+    const count = data.unread_count || 0;
+    if (count > 0) {
+      badge.textContent = count > 9 ? "9+" : String(count);
+      badge.style.display = "inline-flex";
+    } else {
+      badge.style.display = "none";
+    }
+  } catch (e) {
+    // jim o'tkazib yuboriladi: badge shunchaki yangilanmaydi
+  }
 }

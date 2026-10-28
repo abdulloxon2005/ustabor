@@ -39,6 +39,10 @@ PERMISSION_TABLE: dict[tuple[str, str], str | set[str]] = {
     # Authenticated (all active roles)
     ("GET", "/api/v1/auth/me"): {"customer", "master", "admin"},
     ("POST", "/api/v1/auth/change-password"): {"customer", "master", "admin"},
+    ("GET", "/api/v1/notifications"): {"customer", "master", "admin"},
+    ("GET", "/api/v1/notifications/unread-count"): {"customer", "master", "admin"},
+    ("POST", "/api/v1/notifications/{notification_id}/read"): {"customer", "master", "admin"},
+    ("POST", "/api/v1/notifications/read-all"): {"customer", "master", "admin"},
     # Master routes
     ("POST", "/api/v1/masters/profile"): {"master"},
     ("GET", "/api/v1/masters/me"): {"master"},

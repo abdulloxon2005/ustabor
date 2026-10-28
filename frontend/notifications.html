@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#2563eb" />
+  <title>Bildirishnomalar - UstaBor</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <header class="app-header">
+    <a class="brand" href="index.html">UstaBor</a>
+    <button id="mark-all-btn" class="btn btn-outline" type="button">Hammasini o'qilgan deb belgilash</button>
+  </header>
+
+  <main class="container">
+    <h1>Bildirishnomalar</h1>
+    <p id="state" class="muted" aria-live="polite">Yuklanmoqda...</p>
+    <div id="retry-box" style="display:none; margin-bottom:12px;">
+      <button id="retry-btn" class="btn btn-outline" type="button">Qayta urinish</button>
+    </div>
+    <div id="list"></div>
+  </main>
+
+  <nav class="bottom-nav"></nav>
+
+  <script src="js/api.js"></script>
+  <script src="js/ui.js"></script>
+  <script>
+    (() => {
+      const user = requireAuth(["customer", "master", "admin"]);
+      if (!user) return;
+
+      renderNav("notifications");
+
+      const stateEl = document.getElementById("state");
+      const retryBoxEl = document.getElementById("retry-box");
+      const retryBtnEl = document.getElementById("retry-btn");
+      const listEl = document.getElementById("list");
+      const markAllBtn = document.getElementById("mark-all-btn");
+
+      retryBtnEl.addEventListener("click", () => load());
+
+      markAllBtn.addEventListener("click", async () => {
+        markAllBtn.disabled = true;
+        try {
+          await apiFetch("/notifications/read-all", { method: "POST" });
+          await load(true);
+          await refreshNavBadge();
+        } catch (err) {
+          toast(err.message, "error");
+        } finally {
+          markAllBtn.disabled = false;
+        }
+      });
+
+      function orderLink(n) {
+        if (!n.related_order_id) return null;
+        const a = document.createElement("a");
+        a.className = "btn btn-outline btn-block";
+        a.style.marginTop = "8px";
+        a.textContent = "Buyurtmani ko'rish →";
+        a.href = "order-detail.html?id=" + encodeURIComponent(n.related_order_id);
+        return a;
+      }
+
+      function renderNotification(n) {
+        const card = document.createElement("div");
+        card.className = "card";
+        if (!n.is_read) {
+          card.style.borderColor = "var(--primary)";
+          card.style.background = "#eff6ff";
+        }
+
+        const row = document.createElement("div");
+        row.className = "card-row";
+        const title = document.createElement("strong");
+        title.textContent = n.title;
+        row.appendChild(title);
+        if (!n.is_read) {
+          const dot = document.createElement("span");
+          dot.className = "badge";
+          dot.style.background = "var(--primary)";
+          dot.style.color = "#fff";
+          dot.textContent = "Yangi";
+          row.appendChild(dot);
+        }
+        card.appendChild(row);
+
+        const body = document.createElement("p");
+        body.style.margin = "6px 0 0";
+        body.textContent = n.body;
+        card.appendChild(body);
+
+        const meta = document.createElement("p");
+        meta.className = "muted";
+        meta.style.margin = "4px 0 0";
+        meta.textContent = formatDate(n.created_at);
+        card.appendChild(meta);
+
+        const link = orderLink(n);
+        if (link) card.appendChild(link);
+
+        if (!n.is_read) {
+          const readBtn = document.createElement("button");
+          readBtn.type = "button";
+          readBtn.className = "btn btn-outline btn-block";
+          readBtn.style.marginTop = "8px";
+          readBtn.textContent = "O'qilgan deb belgilash";
+          readBtn.addEventListener("click", async () => {
+            readBtn.disabled = true;
+            try {
+              await apiFetch("/notifications/" + n.id + "/read", { method: "POST" });
+              await load(true);
+              await refreshNavBadge();
+            } catch (err) {
+              toast(err.message, "error");
+              readBtn.disabled = false;
+            }
+          });
+          card.appendChild(readBtn);
+        }
+
+        return card;
+      }
+
+      async function load(silent) {
+        if (!silent) {
+          listEl.replaceChildren();
+          retryBoxEl.style.display = "none";
+          retryBtnEl.disabled = true;
+          stateEl.textContent = "Yuklanmoqda...";
+          stateEl.className = "muted";
+        }
+        try {
+          const items = await apiFetch("/notifications");
+          retryBtnEl.disabled = false;
+          retryBoxEl.style.display = "none";
+          listEl.replaceChildren();
+          if (!items.length) {
+            stateEl.textContent = "";
+            const empty = document.createElement("div");
+            empty.className = "card empty-state";
+            empty.textContent = "Hali bildirishnoma yo'q";
+            listEl.appendChild(empty);
+            return;
+          }
+          stateEl.textContent = "";
+          items.forEach((n) => listEl.appendChild(renderNotification(n)));
+        } catch (e) {
+          if (silent) return;
+          retryBtnEl.disabled = false;
+          if (e.status === 403) {
+            renderForbidden(e.message);
+            return;
+          }
+          stateEl.textContent = "Xatolik: " + e.message;
+          stateEl.className = "err";
+          retryBoxEl.style.display = "block";
+        }
+      }
+
+      load();
+      startPolling(() => load(true), 15000);
+    })();
+  </script>
+</body>
+</html>

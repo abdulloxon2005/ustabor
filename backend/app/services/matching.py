@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.core.config import settings
 from app.models import MasterProfile, MasterService, Order, OrderOffer, Review, User
 from app.models.enums import OfferStatus, OrderStatus, SelectionMode
+from app.services import notify
 
 
 # ---------- Bayes reyting ----------
@@ -149,6 +150,14 @@ def create_offer(db: Session, order: Order, master: MasterProfile) -> OrderOffer
         expires_at=expires,
     )
     db.add(offer)
+    notify.notify_user(
+        db,
+        master.user_id,
+        "new_offer",
+        "Yangi taklif",
+        f"#{order.id} buyurtma uchun sizga taklif yuborildi",
+        order_id=order.id,
+    )
     return offer
 
 

@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.models import Order, OrderOffer, OrderStatusHistory, User
 from app.models.enums import OfferStatus, OrderStatus, Role
+from app.services import notify
 
 S = OrderStatus
 
@@ -233,4 +234,14 @@ def assign_master(
     # expire qilib qayta o'qiymiz.
     db.expire_all()
     order = db.get(Order, order_id)
+
+    notify.notify_user(
+        db,
+        order.customer_id,
+        "order_assigned",
+        "Usta biriktirildi",
+        f"#{order.id} buyurtmangizga usta biriktirildi",
+        order_id=order.id,
+    )
+
     return order
