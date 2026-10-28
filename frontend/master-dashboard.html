@@ -75,6 +75,7 @@
   <nav class="bottom-nav"></nav>
 
   <script src="js/api.js"></script>
+  <script src="js/ui.js"></script>
   <script>
     (() => {
       const user = requireAuth(["master"]);
@@ -181,7 +182,7 @@
         rejectBtn.textContent = "Rad etish";
 
         acceptBtn.addEventListener("click", async () => {
-          if (!confirm("Ushbu buyurtmani qabul qilishni tasdiqlaysizmi?")) return;
+          if (!(await confirmModal("Ushbu buyurtmani qabul qilishni tasdiqlaysizmi?"))) return;
           acceptBtn.disabled = true;
           rejectBtn.disabled = true;
           acceptBtn.textContent = "Qabul qilinmoqda...";
@@ -189,7 +190,7 @@
             await apiFetch("/orders/" + offer.order_id + "/accept", { method: "POST" });
             load();
           } catch (err) {
-            alert(err.message);
+            toast(err.message, "error");
             acceptBtn.disabled = false;
             rejectBtn.disabled = false;
             acceptBtn.textContent = "Qabul qilish";
@@ -197,7 +198,7 @@
         });
 
         rejectBtn.addEventListener("click", async () => {
-          if (!confirm("Taklifni rad etishni xohlaysizmi?")) return;
+          if (!(await confirmModal("Taklifni rad etishni xohlaysizmi?"))) return;
           acceptBtn.disabled = true;
           rejectBtn.disabled = true;
           rejectBtn.textContent = "Rad etilmoqda...";
@@ -205,7 +206,7 @@
             await apiFetch("/orders/" + offer.order_id + "/reject", { method: "POST" });
             load();
           } catch (err) {
-            alert(err.message);
+            toast(err.message, "error");
             acceptBtn.disabled = false;
             rejectBtn.disabled = false;
             rejectBtn.textContent = "Rad etish";
@@ -360,7 +361,7 @@
                 await apiFetch("/orders/" + order.id + "/start", { method: "POST" });
                 load();
               } catch (err) {
-                alert(err.message);
+                toast(err.message, "error");
                 startBtn.disabled = false;
                 startBtn.textContent = "Ishni boshlash";
               }
@@ -379,15 +380,15 @@
           completeBtn.className = "btn btn-accent btn-block";
           completeBtn.textContent = "Yakunlash";
           completeBtn.addEventListener("click", async () => {
-            if (!confirm("Ishni yakunlashni tasdiqlaysizmi?")) return;
+            if (!(await confirmModal("Ishni yakunlashni tasdiqlaysizmi?"))) return;
             completeBtn.disabled = true;
             completeBtn.textContent = "Yakunlanmoqda...";
             try {
               const res = await apiFetch("/orders/" + order.id + "/complete", { method: "POST" });
-              alert("Komissiya: " + formatSom(res.commission_amount) + ", sizga: " + formatSom(res.net != null ? res.net : res.net_amount));
+              toast("Komissiya: " + formatSom(res.commission_amount) + ", sizga: " + formatSom(res.net != null ? res.net : res.net_amount), "success");
               load();
             } catch (err) {
-              alert(err.message);
+              toast(err.message, "error");
               completeBtn.disabled = false;
               completeBtn.textContent = "Yakunlash";
             }
@@ -398,13 +399,15 @@
         return card;
       }
 
-      async function load() {
-        stateEl.textContent = "Yuklanmoqda...";
-        stateEl.className = "muted";
-        errorBoxEl.style.display = "none";
-        retryBtnEl.disabled = true;
-        noProfileEl.style.display = "none";
-        contentEl.style.display = "none";
+      async function load(silent) {
+        if (!silent) {
+          stateEl.textContent = "Yuklanmoqda...";
+          stateEl.className = "muted";
+          errorBoxEl.style.display = "none";
+          retryBtnEl.disabled = true;
+          noProfileEl.style.display = "none";
+          contentEl.style.display = "none";
+        }
 
         try {
           const profile = await apiFetch("/masters/me").catch((err) => {
@@ -452,6 +455,7 @@
             active.forEach((a) => activeListEl.appendChild(renderActiveOrder(a)));
           }
         } catch (err) {
+          if (silent) return; // fon rejimida xatolikni jim o'tkazib yuboramiz
           retryBtnEl.disabled = false;
           if (err.status === 403) {
             renderForbidden(err.message);
@@ -464,6 +468,7 @@
       }
 
       load();
+      startPolling(() => load(true), 15000);
     })();
   </script>
 </body>

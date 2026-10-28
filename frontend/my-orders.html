@@ -15,6 +15,15 @@
 
   <main class="container">
     <h1>Buyurtmalarim</h1>
+    <label for="status-filter" class="muted" style="margin-top:0;">Holat bo'yicha filtr</label>
+    <select id="status-filter">
+      <option value="">Barchasi</option>
+      <option value="searching">Qidirilmoqda</option>
+      <option value="assigned">Biriktirildi</option>
+      <option value="in_progress">Jarayonda</option>
+      <option value="completed">Yakunlandi</option>
+      <option value="cancelled">Bekor qilindi</option>
+    </select>
     <p id="state" class="muted" aria-live="polite">Yuklanmoqda...</p>
     <div id="retry-box" style="display:none; margin-bottom:12px;">
       <button id="retry-btn" class="btn btn-outline" type="button">Qayta urinish</button>
@@ -25,6 +34,7 @@
   <nav class="bottom-nav"></nav>
 
   <script src="js/api.js"></script>
+  <script src="js/ui.js"></script>
   <script>
     (() => {
       const user = requireAuth(["customer"]);
@@ -36,8 +46,10 @@
       const retryBoxEl = document.getElementById("retry-box");
       const retryBtnEl = document.getElementById("retry-btn");
       const listEl = document.getElementById("list");
+      const statusFilterEl = document.getElementById("status-filter");
 
       retryBtnEl.addEventListener("click", () => load());
+      statusFilterEl.addEventListener("change", () => load());
 
       const orderNote = sessionStorage.getItem("order_note");
       if (orderNote) {
@@ -148,7 +160,7 @@
               rejectBtn.textContent = "Rad etish";
 
               acceptBtn.addEventListener("click", async () => {
-                if (!confirm("Narx taklifini tasdiqlaysizmi: " + formatSom(proposedQuote.price) + "?")) return;
+                if (!(await confirmModal("Narx taklifini tasdiqlaysizmi: " + formatSom(proposedQuote.price) + "?"))) return;
                 acceptBtn.disabled = true;
                 rejectBtn.disabled = true;
                 acceptBtn.textContent = "Tasdiqlanmoqda...";
@@ -158,7 +170,7 @@
                   });
                   load();
                 } catch (err) {
-                  alert(err.message);
+                  toast(err.message, "error");
                   acceptBtn.disabled = false;
                   rejectBtn.disabled = false;
                   acceptBtn.textContent = "Tasdiqlash";
@@ -166,7 +178,7 @@
               });
 
               rejectBtn.addEventListener("click", async () => {
-                if (!confirm("Narx taklifini rad etishni xohlaysizmi?")) return;
+                if (!(await confirmModal("Narx taklifini rad etishni xohlaysizmi?"))) return;
                 acceptBtn.disabled = true;
                 rejectBtn.disabled = true;
                 rejectBtn.textContent = "Rad etilmoqda...";
@@ -176,7 +188,7 @@
                   });
                   load();
                 } catch (err) {
-                  alert(err.message);
+                  toast(err.message, "error");
                   acceptBtn.disabled = false;
                   rejectBtn.disabled = false;
                   rejectBtn.textContent = "Rad etish";
@@ -233,14 +245,14 @@
           btn.style.marginTop = "12px";
           btn.textContent = "Bekor qilish";
           btn.addEventListener("click", async () => {
-            if (!confirm("Buyurtmani bekor qilishni xohlaysizmi?")) return;
+            if (!(await confirmModal("Buyurtmani bekor qilishni xohlaysizmi?"))) return;
             btn.disabled = true;
             btn.textContent = "Bekor qilinmoqda...";
             try {
               await apiFetch("/orders/" + o.id + "/cancel", { method: "POST" });
               load();
             } catch (err) {
-              alert(err.message);
+              toast(err.message, "error");
               btn.disabled = false;
               btn.textContent = "Bekor qilish";
             }
@@ -258,15 +270,22 @@
         return card;
       }
 
-      async function load() {
-        listEl.replaceChildren();
-        retryBoxEl.style.display = "none";
-        retryBtnEl.disabled = true;
-        stateEl.textContent = "Yuklanmoqda...";
-        stateEl.className = "muted";
+      async function load(silent) {
+        if (!silent) {
+          listEl.replaceChildren();
+          retryBoxEl.style.display = "none";
+          retryBtnEl.disabled = true;
+          stateEl.textContent = "Yuklanmoqda...";
+          stateEl.className = "muted";
+        }
         try {
-          const orders = await apiFetch("/orders");
+          const q = statusFilterEl.value
+            ? "?status_filter=" + encodeURIComponent(statusFilterEl.value)
+            : "";
+          const orders = await apiFetch("/orders" + q);
           retryBtnEl.disabled = false;
+          retryBoxEl.style.display = "none";
+          listEl.replaceChildren();
           if (!orders.length) {
             stateEl.textContent = "";
             const empty = document.createElement("div");
@@ -276,8 +295,10 @@
             return;
           }
           stateEl.textContent = orders.length + " ta buyurtma";
+          stateEl.className = "muted";
           orders.forEach((o) => listEl.appendChild(renderOrder(o)));
         } catch (e) {
+          if (silent) return; // fon rejimida xatolikni jim o'tkazib yuboramiz
           retryBtnEl.disabled = false;
           if (e.status === 403) {
             renderForbidden(e.message);
@@ -290,6 +311,7 @@
       }
 
       load();
+      startPolling(() => load(true), 15000);
     })();
   </script>
 </body>

@@ -72,6 +72,7 @@
   <nav class="bottom-nav"></nav>
 
   <script src="js/api.js"></script>
+  <script src="js/ui.js"></script>
   <script>
     (() => {
       const user = requireAuth(["customer"]);
@@ -200,7 +201,7 @@
           rejectBtn.textContent = "Rad etish";
 
           acceptBtn.addEventListener("click", async () => {
-            if (!confirm("Narx taklifini tasdiqlaysizmi: " + formatSom(proposedQuote.price) + "?")) return;
+            if (!(await confirmModal("Narx taklifini tasdiqlaysizmi: " + formatSom(proposedQuote.price) + "?"))) return;
             acceptBtn.disabled = true;
             rejectBtn.disabled = true;
             acceptBtn.textContent = "Tasdiqlanmoqda...";
@@ -210,7 +211,7 @@
               });
               loadOrder();
             } catch (err) {
-              alert(err.message);
+              toast(err.message, "error");
               acceptBtn.disabled = false;
               rejectBtn.disabled = false;
               acceptBtn.textContent = "Tasdiqlash";
@@ -218,7 +219,7 @@
           });
 
           rejectBtn.addEventListener("click", async () => {
-            if (!confirm("Narx taklifini rad etishni xohlaysizmi?")) return;
+            if (!(await confirmModal("Narx taklifini rad etishni xohlaysizmi?"))) return;
             acceptBtn.disabled = true;
             rejectBtn.disabled = true;
             rejectBtn.textContent = "Rad etilmoqda...";
@@ -228,7 +229,7 @@
               });
               loadOrder();
             } catch (err) {
-              alert(err.message);
+              toast(err.message, "error");
               acceptBtn.disabled = false;
               rejectBtn.disabled = false;
               rejectBtn.textContent = "Rad etish";
@@ -364,10 +365,12 @@
         }
       }
 
-      async function loadOrder() {
-        retryBoxEl.style.display = "none";
-        notFoundBoxEl.style.display = "none";
-        contentEl.style.display = "none";
+      async function loadOrder(silent) {
+        if (!silent) {
+          retryBoxEl.style.display = "none";
+          notFoundBoxEl.style.display = "none";
+          contentEl.style.display = "none";
+        }
 
         if (!orderId) {
           stateEl.textContent = "";
@@ -376,9 +379,11 @@
           return;
         }
 
-        retryBtnEl.disabled = true;
-        stateEl.textContent = "Yuklanmoqda...";
-        stateEl.className = "muted";
+        if (!silent) {
+          retryBtnEl.disabled = true;
+          stateEl.textContent = "Yuklanmoqda...";
+          stateEl.className = "muted";
+        }
 
         try {
           const order = await apiFetch("/orders/" + orderId);
@@ -418,14 +423,14 @@
             cancelBtn.disabled = false;
             cancelBtn.textContent = "Bekor qilish";
             cancelBtn.onclick = async () => {
-              if (!confirm("Buyurtmani bekor qilishni xohlaysizmi?")) return;
+              if (!(await confirmModal("Buyurtmani bekor qilishni xohlaysizmi?"))) return;
               cancelBtn.disabled = true;
               cancelBtn.textContent = "Bekor qilinmoqda...";
               try {
                 await apiFetch("/orders/" + order.id + "/cancel", { method: "POST" });
                 loadOrder();
               } catch (err) {
-                alert(err.message);
+                toast(err.message, "error");
                 cancelBtn.disabled = false;
                 cancelBtn.textContent = "Bekor qilish";
               }
@@ -434,6 +439,7 @@
             cancelBtn.style.display = "none";
           }
         } catch (err) {
+          if (silent) return; // fon rejimida xatolikni jim o'tkazib yuboramiz
           retryBtnEl.disabled = false;
           if (err.status === 403) {
             renderForbidden(err.message);
@@ -452,6 +458,7 @@
       }
 
       loadOrder();
+      startPolling(() => loadOrder(true), 15000);
     })();
   </script>
 </body>

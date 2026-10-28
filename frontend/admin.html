@@ -201,6 +201,7 @@
   <nav class="bottom-nav"></nav>
 
   <script src="js/api.js"></script>
+  <script src="js/ui.js"></script>
   <script>
     (() => {
       const adminUser = requireAuth(["admin"]);
@@ -452,7 +453,7 @@
             btn.textContent = "Biriktirish";
 
             btn.addEventListener("click", async () => {
-              if (!confirm(m.full_name + " ushbu buyurtmaga biriktirilsinmi?")) return;
+              if (!(await confirmModal(m.full_name + " ushbu buyurtmaga biriktirilsinmi?"))) return;
               btn.disabled = true;
               btn.textContent = "Biriktirilmoqda...";
               try {
@@ -463,7 +464,7 @@
                 assignModal.style.display = "none";
                 loadOrders();
               } catch (err) {
-                alert("Xatolik: " + err.message);
+                toast("Xatolik: " + err.message, "error");
                 btn.disabled = false;
                 btn.textContent = "Biriktirish";
               }
@@ -618,7 +619,7 @@
                 const msg = nextState
                   ? u.full_name + " profilini tasdiqlaysizmi?"
                   : u.full_name + " profilining tasdiqini bekor qilasizmi?";
-                if (!confirm(msg)) return;
+                if (!(await confirmModal(msg))) return;
                 appBtn.disabled = true;
                 appBtn.textContent = "Saqlanmoqda...";
                 try {
@@ -628,7 +629,7 @@
                   });
                   loadUsers();
                 } catch (err) {
-                  alert("Xatolik: " + err.message);
+                  toast("Xatolik: " + err.message, "error");
                   appBtn.disabled = false;
                   appBtn.textContent = defaultAppLabel;
                 }
@@ -650,7 +651,7 @@
                 const msg = nextState
                   ? u.full_name + " akkauntini faollashtirasizmi?"
                   : u.full_name + " akkauntini bloklaysizmi?";
-                if (!confirm(msg)) return;
+                if (!(await confirmModal(msg))) return;
                 blockBtn.disabled = true;
                 blockBtn.textContent = "Saqlanmoqda...";
                 try {
@@ -660,7 +661,7 @@
                   });
                   loadUsers();
                 } catch (err) {
-                  alert("Xatolik: " + err.message);
+                  toast("Xatolik: " + err.message, "error");
                   blockBtn.disabled = false;
                   blockBtn.textContent = defaultBlockLabel;
                 }
