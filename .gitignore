@@ -15,6 +15,9 @@ __pycache__/
 *.sqlite3
 backups/
 
+# Mock SMS chiqishi (faqat lokal qo'lda sinash uchun)
+sms_outbox.log
+
 # Tizim / muharrir
 .DS_Store
 .idea/

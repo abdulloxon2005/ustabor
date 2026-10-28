@@ -6,14 +6,15 @@ from fastapi import Depends
 
 from app import models
 from app.api.deps import require_role
-from app.api.v1.auth import _failed_attempts
 from app.core.config import settings
 from app.core.security import create_access_token, decode_access_token
 from app.main import app
 from app.models.enums import Role
 from app.schemas.auth import normalize_phone
+from tests.conftest import otp_code_for
 
 REGISTER = "/api/v1/auth/register"
+REGISTER_OTP = "/api/v1/auth/register/request-otp"
 LOGIN = "/api/v1/auth/login"
 ME = "/api/v1/auth/me"
 CHANGE_PASSWORD = "/api/v1/auth/change-password"
@@ -26,15 +27,20 @@ CUSTOMER = {
 }
 
 
-@pytest.fixture(autouse=True)
-def clean_failed_attempts():
-    _failed_attempts.clear()
-    yield
-    _failed_attempts.clear()
-
-
 def register(client, **overrides):
-    return client.post(REGISTER, json={**CUSTOMER, **overrides})
+    """CUSTOMER + overrides bilan ro'yxatdan o'tadi: avval OTP so'raydi (muvaffaqiyatli
+    bo'lsa haqiqiy kodni ishlatadi), so'ng /register ga yuboradi. Telefon noto'g'ri yoki
+    allaqachon band bo'lsa ham /register o'zi tegishli xatolikni qaytaradi (OTP qadami
+    shunchaki muvaffaqiyatsiz o'tadi, bu testlar kutgan natijaga ta'sir qilmaydi)."""
+    payload = {**CUSTOMER, **overrides}
+    phone = payload.get("phone")
+    otp_code = "000000"
+    if isinstance(phone, str):
+        otp_r = client.post(REGISTER_OTP, json={"phone": phone})
+        if otp_r.status_code == 200:
+            otp_code = otp_code_for(phone)
+    payload.setdefault("otp_code", otp_code)
+    return client.post(REGISTER, json=payload)
 
 
 # ---------- register ----------

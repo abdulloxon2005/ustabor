@@ -49,6 +49,11 @@ class PaymentStatus(str, enum.Enum):
     PAID = "paid"
 
 
+class OtpPurpose(str, enum.Enum):
+    REGISTER = "register"
+    RESET = "reset"
+
+
 def enum_type(enum_cls: type[enum.Enum]) -> SAEnum:
     """Enumni bazada VARCHAR sifatida saqlaydi (SQLite va PostgreSQL uchun bir xil).
 

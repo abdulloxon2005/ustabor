@@ -16,6 +16,13 @@ from app.models.enums import (
     Role,
     SelectionMode,
 )
+from tests.conftest import otp_code_for
+
+
+def _request_otp(client, phone: str) -> str:
+    r = client.post("/api/v1/auth/register/request-otp", json={"phone": phone})
+    assert r.status_code == 200, r.text
+    return otp_code_for(phone)
 
 _PASSWORD_HASH = hash_password("secret123")
 SQLI_STR = "'; DROP TABLE users;--"
@@ -1057,6 +1064,7 @@ def test_registration_validation_and_mass_assignment_protection(
             "password": "password123",
             "full_name": "Birinchi User",
             "role": "customer",
+            "otp_code": _request_otp(vclient, "90 777-88-99"),
         },
     )
     assert r_ok.status_code == 201
@@ -1076,6 +1084,7 @@ def test_registration_validation_and_mass_assignment_protection(
                 "password": "password123",
                 "full_name": "Dublikat User",
                 "role": "customer",
+                "otp_code": "000000",  # phone-taken tekshiruvi OTP dan oldin -> qiymat muhim emas
             },
         )
         assert r_dup.status_code == 409, f"dup_phone={dup_phone!r} -> {r_dup.status_code}"
@@ -1105,6 +1114,7 @@ def test_registration_validation_and_mass_assignment_protection(
             "is_approved": True,
             "rating_avg": 5.0,
             "commission_rate": 0,
+            "otp_code": _request_otp(vclient, "+998906663344"),
         },
     )
     assert r_extra.status_code == 201
@@ -1129,6 +1139,7 @@ def test_stored_text_round_trip_preserves_script_tag_unchanged(vclient, val_env)
             "password": "password123",
             "full_name": name_with_script,
             "role": "customer",
+            "otp_code": _request_otp(vclient, "+998908889900"),
         },
     )
     assert r_reg.status_code == 201

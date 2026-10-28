@@ -27,7 +27,10 @@ PERMISSION_TABLE: dict[tuple[str, str], str | set[str]] = {
     # Public routes
     ("GET", "/"): "public",
     ("GET", "/api/v1/health"): "public",
+    ("POST", "/api/v1/auth/register/request-otp"): "public",
     ("POST", "/api/v1/auth/register"): "public",
+    ("POST", "/api/v1/auth/forgot-password/request-otp"): "public",
+    ("POST", "/api/v1/auth/forgot-password/confirm"): "public",
     ("POST", "/api/v1/auth/login"): "public",
     ("GET", "/api/v1/categories"): "public",
     ("GET", "/api/v1/masters"): "public",

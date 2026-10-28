@@ -10,6 +10,13 @@ from app import models
 from app.db.session import SessionLocal
 from app.main import app
 from app.models.enums import OfferStatus, OrderStatus
+from tests.conftest import otp_code_for
+
+
+def _register_otp(client, phone: str) -> str:
+    r = client.post("/api/v1/auth/register/request-otp", json={"phone": phone})
+    assert r.status_code == 200, r.text
+    return otp_code_for(phone)
 
 
 def _register_and_setup_master(
@@ -30,6 +37,7 @@ def _register_and_setup_master(
             "password": "password123",
             "full_name": full_name,
             "role": "master",
+            "otp_code": _register_otp(client, phone),
         },
     )
     assert r_reg.status_code == 201, r_reg.text
@@ -72,6 +80,7 @@ def _register_customer(client, phone: str, full_name: str = "Mijoz Alisher") -> 
             "password": "password123",
             "full_name": full_name,
             "role": "customer",
+            "otp_code": _register_otp(client, phone),
         },
     )
     assert r.status_code == 201, r.text

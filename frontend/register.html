@@ -15,35 +15,50 @@
   <main class="container">
     <form id="form" class="card auth-card" novalidate>
       <h1>Ro'yxatdan o'tish</h1>
-      <p class="muted">Yangi akkaunt yarating</p>
+      <p id="step-hint" class="muted">Yangi akkaunt yarating</p>
 
-      <label id="role-label">Men</label>
-      <div class="segmented" role="radiogroup" aria-labelledby="role-label">
-        <label>
-          <input type="radio" name="role" value="customer" checked />
-          <span>Mijoz</span>
-        </label>
-        <label>
-          <input type="radio" name="role" value="master" />
-          <span>Usta</span>
-        </label>
+      <div id="details-step">
+        <label id="role-label">Men</label>
+        <div class="segmented" role="radiogroup" aria-labelledby="role-label">
+          <label>
+            <input type="radio" name="role" value="customer" checked />
+            <span>Mijoz</span>
+          </label>
+          <label>
+            <input type="radio" name="role" value="master" />
+            <span>Usta</span>
+          </label>
+        </div>
+
+        <label for="full_name">Ism va familiya</label>
+        <input id="full_name" name="full_name" type="text" autocomplete="name"
+               minlength="2" maxlength="120" required />
+
+        <label for="phone">Telefon raqami</label>
+        <input id="phone" name="phone" type="tel" inputmode="tel" autocomplete="tel"
+               placeholder="+998 90 123 45 67" required />
+
+        <label for="password">Parol (kamida 8 ta belgi, harf va raqam)</label>
+        <input id="password" name="password" type="password"
+               autocomplete="new-password" minlength="8" maxlength="72" required />
       </div>
 
-      <label for="full_name">Ism va familiya</label>
-      <input id="full_name" name="full_name" type="text" autocomplete="name"
-             minlength="2" maxlength="120" required />
-
-      <label for="phone">Telefon raqami</label>
-      <input id="phone" name="phone" type="tel" inputmode="tel" autocomplete="tel"
-             placeholder="+998 90 123 45 67" required />
-
-      <label for="password">Parol (kamida 8 ta belgi, harf va raqam)</label>
-      <input id="password" name="password" type="password"
-             autocomplete="new-password" minlength="8" maxlength="72" required />
+      <div id="otp-step" style="display:none;">
+        <p class="muted" id="otp-phone-note"></p>
+        <label for="otp_code">SMS orqali yuborilgan kod</label>
+        <input id="otp_code" name="otp_code" type="text" inputmode="numeric"
+               autocomplete="one-time-code" minlength="6" maxlength="6"
+               pattern="\d{6}" placeholder="______" />
+        <p class="auth-switch" style="margin-top:8px;">
+          <a href="#" id="back-link">← Telefon raqamini o'zgartirish</a>
+          ·
+          <a href="#" id="resend-link">Kodni qayta yuborish</a>
+        </p>
+      </div>
 
       <div id="error" class="form-error" role="alert"></div>
 
-      <button id="submit" class="btn btn-block" type="submit">Ro'yxatdan o'tish</button>
+      <button id="submit" class="btn btn-block" type="submit">Kod yuborish</button>
 
       <p class="auth-switch">Akkauntingiz bormi? <a href="login.html">Kirish</a></p>
     </form>
@@ -59,46 +74,129 @@
     const form = document.getElementById("form");
     const submit = document.getElementById("submit");
     const errorEl = document.getElementById("error");
+    const stepHintEl = document.getElementById("step-hint");
+    const detailsStepEl = document.getElementById("details-step");
+    const otpStepEl = document.getElementById("otp-step");
+    const otpPhoneNoteEl = document.getElementById("otp-phone-note");
+    const otpInput = document.getElementById("otp_code");
+    const backLink = document.getElementById("back-link");
+    const resendLink = document.getElementById("resend-link");
 
-    form.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      errorEl.textContent = "";
-      const payload = {
+    let step = "details"; // "details" | "otp"
+    let pendingPayload = null;
+
+    function readDetailsPayload() {
+      return {
         role: form.role.value,
         full_name: form.full_name.value.trim(),
         phone: form.phone.value.trim(),
         password: form.password.value,
       };
+    }
+
+    function validateDetails(payload) {
       if (payload.full_name.length < 2) {
-        errorEl.textContent = "Ism kamida 2 ta belgidan iborat bo'lishi kerak";
-        return;
+        return "Ism kamida 2 ta belgidan iborat bo'lishi kerak";
       }
       if (!payload.phone) {
-        errorEl.textContent = "Telefon raqamini kiriting";
-        return;
+        return "Telefon raqamini kiriting";
       }
       if (payload.password.length < 8) {
-        errorEl.textContent = "Parol kamida 8 ta belgidan iborat bo'lishi kerak";
-        return;
+        return "Parol kamida 8 ta belgidan iborat bo'lishi kerak";
       }
       if (!/[a-zA-Z]/.test(payload.password) || !/\d/.test(payload.password)) {
-        errorEl.textContent = "Parolda kamida bitta harf va bitta raqam bo'lishi kerak";
+        return "Parolda kamida bitta harf va bitta raqam bo'lishi kerak";
+      }
+      return null;
+    }
+
+    function showOtpStep() {
+      step = "otp";
+      detailsStepEl.style.display = "none";
+      otpStepEl.style.display = "block";
+      stepHintEl.textContent = "Telefoningizga yuborilgan kodni kiriting";
+      otpPhoneNoteEl.textContent = pendingPayload.phone + " raqamiga tasdiqlash kodi yuborildi";
+      submit.textContent = "Tasdiqlash";
+      otpInput.value = "";
+      otpInput.focus();
+    }
+
+    function showDetailsStep() {
+      step = "details";
+      detailsStepEl.style.display = "block";
+      otpStepEl.style.display = "none";
+      stepHintEl.textContent = "Yangi akkaunt yarating";
+      submit.textContent = "Kod yuborish";
+      errorEl.textContent = "";
+    }
+
+    backLink.addEventListener("click", (e) => {
+      e.preventDefault();
+      showDetailsStep();
+    });
+
+    resendLink.addEventListener("click", async (e) => {
+      e.preventDefault();
+      if (!pendingPayload) return;
+      errorEl.textContent = "";
+      try {
+        await apiFetch("/auth/register/request-otp", {
+          method: "POST",
+          body: JSON.stringify({ phone: pendingPayload.phone }),
+        });
+        toast("Kod qayta yuborildi", "success");
+      } catch (err) {
+        errorEl.textContent = err.message;
+      }
+    });
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      errorEl.textContent = "";
+
+      if (step === "details") {
+        const payload = readDetailsPayload();
+        const validationError = validateDetails(payload);
+        if (validationError) {
+          errorEl.textContent = validationError;
+          return;
+        }
+        submit.disabled = true;
+        submit.textContent = "Yuborilmoqda...";
+        try {
+          await apiFetch("/auth/register/request-otp", {
+            method: "POST",
+            body: JSON.stringify({ phone: payload.phone }),
+          });
+          pendingPayload = payload;
+          showOtpStep();
+        } catch (err) {
+          errorEl.textContent = err.message;
+        } finally {
+          submit.disabled = false;
+        }
         return;
       }
 
+      // step === "otp"
+      const code = otpInput.value.trim();
+      if (!/^\d{6}$/.test(code)) {
+        errorEl.textContent = "Kod 6 ta raqamdan iborat bo'lishi kerak";
+        return;
+      }
       submit.disabled = true;
-      submit.textContent = "Yuborilmoqda...";
+      submit.textContent = "Tasdiqlanmoqda...";
       try {
         const data = await apiFetch("/auth/register", {
           method: "POST",
-          body: JSON.stringify(payload),
+          body: JSON.stringify({ ...pendingPayload, otp_code: code }),
         });
         saveSession(data.access_token, data.user);
         window.location.replace(homeFor(data.user));
       } catch (err) {
         errorEl.textContent = err.message;
         submit.disabled = false;
-        submit.textContent = "Ro'yxatdan o'tish";
+        submit.textContent = "Tasdiqlash";
       }
     });
   </script>

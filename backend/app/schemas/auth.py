@@ -24,12 +24,26 @@ def normalize_phone(raw: str) -> str:
     return "+" + digits
 
 
+def validate_password_complexity(v: str) -> str:
+    if not any(c.isalpha() for c in v) or not any(c.isdigit() for c in v):
+        raise ValueError("Parol kamida bitta harf va bitta raqamdan iborat bo'lishi kerak")
+    return v
+
+
+def validate_otp_code(v: str) -> str:
+    v = v.strip()
+    if not (len(v) == 6 and v.isdigit()):
+        raise ValueError("Tasdiqlash kodi 6 ta raqamdan iborat bo'lishi kerak")
+    return v
+
+
 class RegisterRequest(BaseModel):
     # Noma'lum maydonlar (is_active, is_approved...) e'tiborga olinmaydi
     phone: str
     password: str = Field(min_length=8, max_length=72)
     full_name: str = Field(min_length=2, max_length=120)
     role: Literal["customer", "master"]
+    otp_code: str
 
     @field_validator("phone")
     @classmethod
@@ -47,9 +61,12 @@ class RegisterRequest(BaseModel):
     @field_validator("password")
     @classmethod
     def _password(cls, v: str) -> str:
-        if not any(c.isalpha() for c in v) or not any(c.isdigit() for c in v):
-            raise ValueError("Parol kamida bitta harf va bitta raqamdan iborat bo'lishi kerak")
-        return v
+        return validate_password_complexity(v)
+
+    @field_validator("otp_code")
+    @classmethod
+    def _otp_code(cls, v: str) -> str:
+        return validate_otp_code(v)
 
 
 class ChangePasswordRequest(BaseModel):
@@ -59,9 +76,7 @@ class ChangePasswordRequest(BaseModel):
     @field_validator("new_password")
     @classmethod
     def _new_password(cls, v: str) -> str:
-        if not any(c.isalpha() for c in v) or not any(c.isdigit() for c in v):
-            raise ValueError("Yangi parol kamida bitta harf va bitta raqamdan iborat bo'lishi kerak")
-        return v
+        return validate_password_complexity(v)
 
 
 class LoginRequest(BaseModel):
@@ -72,6 +87,38 @@ class LoginRequest(BaseModel):
     @classmethod
     def _phone(cls, v: str) -> str:
         return normalize_phone(v)
+
+
+class PhoneOnlyRequest(BaseModel):
+    """/register/request-otp va /forgot-password/request-otp uchun."""
+
+    phone: str
+
+    @field_validator("phone")
+    @classmethod
+    def _phone(cls, v: str) -> str:
+        return normalize_phone(v)
+
+
+class ForgotPasswordConfirm(BaseModel):
+    phone: str
+    otp_code: str
+    new_password: str = Field(min_length=8, max_length=72)
+
+    @field_validator("phone")
+    @classmethod
+    def _phone(cls, v: str) -> str:
+        return normalize_phone(v)
+
+    @field_validator("otp_code")
+    @classmethod
+    def _otp_code(cls, v: str) -> str:
+        return validate_otp_code(v)
+
+    @field_validator("new_password")
+    @classmethod
+    def _new_password(cls, v: str) -> str:
+        return validate_password_complexity(v)
 
 
 class UserOut(BaseModel):

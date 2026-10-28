@@ -4,6 +4,8 @@ import os
 os.environ.setdefault("SECRET_KEY", "test-secret-key-faqat-testlar-uchun")
 os.environ["DATABASE_URL"] = "sqlite:///./test.db"
 
+import re
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -13,6 +15,8 @@ from app.db.base import Base
 from app.db.session import SessionLocal, engine
 from app.main import app
 from app.models.enums import Role
+from app.schemas.auth import normalize_phone
+from app.services import sms
 
 
 @pytest.fixture
@@ -73,14 +77,37 @@ def make_category(db):
     return _make
 
 
+def otp_code_for(phone: str) -> str:
+    """Mock SMS outbox'dan shu raqamga yuborilgan oxirgi 6 xonali kodni oladi.
+
+    `phone` normallashtiriladi (90 123-45-67 -> +998901234567), chunki
+    outbox'da backend normallashtirgan raqam saqlanadi.
+    """
+    phone = normalize_phone(phone)
+    msg = sms.last_message_for(phone)
+    assert msg is not None, f"{phone} uchun SMS yuborilmagan"
+    match = re.search(r"\d{6}", msg["text"])
+    assert match is not None, f"SMS matnida kod topilmadi: {msg['text']}"
+    return match.group(0)
+
+
 @pytest.fixture
 def signup(client, auth_header):
-    """API orqali ro'yxatdan o'tadi va (headers, user_dict) qaytaradi."""
+    """OTP so'rab, tasdiqlab ro'yxatdan o'tadi va (headers, user_dict) qaytaradi."""
 
     def _signup(role="customer", phone="+998901234567", full_name="Test Foydalanuvchi"):
+        otp_r = client.post("/api/v1/auth/register/request-otp", json={"phone": phone})
+        assert otp_r.status_code == 200, otp_r.text
+        code = otp_code_for(phone)
         r = client.post(
             "/api/v1/auth/register",
-            json={"phone": phone, "password": "secret123", "full_name": full_name, "role": role},
+            json={
+                "phone": phone,
+                "password": "secret123",
+                "full_name": full_name,
+                "role": role,
+                "otp_code": code,
+            },
         )
         assert r.status_code == 201, r.text
         body = r.json()
