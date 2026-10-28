@@ -1,13 +1,13 @@
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
-from sqlalchemy import exists, select
+from fastapi import APIRouter, Depends, File, HTTPException, Path, Query, UploadFile, status
+from sqlalchemy import exists, func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.api.deps import require_role
 from app.core.config import MAX_DB_INT, settings
 from app.db.session import get_db
-from app.models import Category, MasterProfile, MasterService, Order, OrderOffer, OrderStatusHistory, Quote, Review, User
+from app.models import Category, MasterProfile, MasterService, Order, OrderOffer, OrderPhoto, OrderStatusHistory, Quote, Review, User
 from app.models.enums import OfferStatus, OrderStatus, Role, SelectionMode
 from app.schemas.order import (
     OfferOut,
@@ -18,12 +18,15 @@ from app.schemas.order import (
     OrderOut,
     SelectMasterIn,
 )
+from app.schemas.photo import PhotoOut
 from app.schemas.quote import QuoteIn, QuoteOut
 from app.schemas.review import OrderReviewOut, ReviewCreate, ReviewOut
-from app.services import matching, pricing, reviews
+from app.services import matching, pricing, reviews, storage
 from app.services.order_flow import assign_master, create_order_history, transition
 
 router = APIRouter(prefix="/orders", tags=["orders"])
+
+MAX_ORDER_PHOTOS = 5
 
 _ORDER_OPTS = (
     selectinload(Order.history),
@@ -31,6 +34,7 @@ _ORDER_OPTS = (
     selectinload(Order.offers),
     selectinload(Order.quotes),
     selectinload(Order.master).selectinload(MasterProfile.user),
+    selectinload(Order.photos),
 )
 
 
@@ -127,6 +131,8 @@ def _order_detail_out(order: Order, db: Session, note: str | None = None) -> Ord
     review_out = OrderReviewOut(rating=rev.rating, comment=rev.comment, created_at=rev.created_at) if rev else None
     can_review = bool(order.status == OrderStatus.COMPLETED and rev is None)
 
+    photos = [storage.url_for(p.file_path) for p in (order.photos or [])]
+
     return OrderDetailOut(
         id=order.id,
         customer_id=order.customer_id,
@@ -151,6 +157,7 @@ def _order_detail_out(order: Order, db: Session, note: str | None = None) -> Ord
         review=review_out,
         can_review=can_review,
         note=note,
+        photos=photos,
     )
 
 
@@ -630,4 +637,63 @@ def submit_order_review(
     db.commit()
     db.refresh(rev)
     return rev
+
+
+# ---------- Rasmlar ----------
+
+
+@router.post(
+    "/{order_id}/photos",
+    response_model=list[PhotoOut],
+    status_code=status.HTTP_201_CREATED,
+)
+async def upload_order_photos(
+    order_id: int = Path(..., le=MAX_DB_INT),
+    files: list[UploadFile] = File(...),
+    user: User = Depends(require_role(Role.CUSTOMER)),
+    db: Session = Depends(get_db),
+):
+    order = _own_order(order_id, user, db)
+
+    existing = db.scalar(
+        select(func.count(OrderPhoto.id)).where(OrderPhoto.order_id == order.id)
+    )
+    if (existing or 0) + len(files) > MAX_ORDER_PHOTOS:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            f"Buyurtmaga ko'pi bilan {MAX_ORDER_PHOTOS} ta rasm yuklash mumkin",
+        )
+
+    saved: list[OrderPhoto] = []
+    for f in files:
+        rel_path = await storage.save_image(f, "order_photos")
+        photo = OrderPhoto(order_id=order.id, file_path=rel_path)
+        db.add(photo)
+        saved.append(photo)
+    db.commit()
+    for p in saved:
+        db.refresh(p)
+
+    return [
+        PhotoOut(id=p.id, url=storage.url_for(p.file_path), created_at=p.created_at)
+        for p in saved
+    ]
+
+
+@router.delete("/{order_id}/photos/{photo_id}")
+def delete_order_photo(
+    order_id: int = Path(..., le=MAX_DB_INT),
+    photo_id: int = Path(..., le=MAX_DB_INT),
+    user: User = Depends(require_role(Role.CUSTOMER)),
+    db: Session = Depends(get_db),
+):
+    order = _own_order(order_id, user, db)
+    photo = db.get(OrderPhoto, photo_id)
+    if photo is None or photo.order_id != order.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Rasm topilmadi")
+
+    storage.delete_image(photo.file_path)
+    db.delete(photo)
+    db.commit()
+    return {"detail": "Rasm o'chirildi"}
 

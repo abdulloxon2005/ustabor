@@ -215,7 +215,12 @@ function formatSom(n) {
 // ===== So'rovlar =====
 async function apiFetch(path, options = {}) {
   const { headers, ...rest } = options;
-  const finalHeaders = { "Content-Type": "application/json", ...(headers || {}) };
+  // FormData (fayl yuklash) uchun Content-Type qo'yilmaydi: brauzer o'zi
+  // to'g'ri "multipart/form-data; boundary=..." sarlavhasini qo'shadi.
+  const isFormData = typeof FormData !== "undefined" && rest.body instanceof FormData;
+  const finalHeaders = isFormData
+    ? { ...(headers || {}) }
+    : { "Content-Type": "application/json", ...(headers || {}) };
   const token = getToken();
   if (token && !finalHeaders.Authorization) {
     finalHeaders.Authorization = `Bearer ${token}`;

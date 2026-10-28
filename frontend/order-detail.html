@@ -49,6 +49,9 @@
 
         <div id="orderNoteBox" style="display: none; margin-top: 10px;"></div>
 
+        <!-- Rasmlar -->
+        <div id="photosSection" style="margin-top: 12px;"></div>
+
         <!-- Narx bloki -->
         <div id="priceSection" style="margin-top: 12px;"></div>
 
@@ -99,11 +102,80 @@
       const createdTextEl = document.getElementById("createdText");
       const masterNameEl = document.getElementById("masterName");
       const priceSectionEl = document.getElementById("priceSection");
+      const photosSectionEl = document.getElementById("photosSection");
       const cancelBtn = document.getElementById("cancelBtn");
       const timelineListEl = document.getElementById("timelineList");
       const reviewSectionEl = document.getElementById("reviewSection");
 
       const CANCELLABLE = new Set(["searching", "assigned"]);
+      const MAX_ORDER_PHOTOS = 5;
+
+      function renderPhotos(order) {
+        photosSectionEl.replaceChildren();
+
+        const title = document.createElement("div");
+        title.style.fontWeight = "600";
+        title.style.marginBottom = "8px";
+        title.textContent = "Rasmlar";
+        photosSectionEl.appendChild(title);
+
+        const photos = order.photos || [];
+        if (photos.length) {
+          const grid = document.createElement("div");
+          grid.style.display = "grid";
+          grid.style.gridTemplateColumns = "repeat(auto-fill, minmax(84px, 1fr))";
+          grid.style.gap = "8px";
+          photos.forEach((url) => {
+            const a = document.createElement("a");
+            a.href = API_BASE.replace("/api/v1", "") + url;
+            a.target = "_blank";
+            a.rel = "noopener";
+            const img = document.createElement("img");
+            img.src = API_BASE.replace("/api/v1", "") + url;
+            img.alt = "Buyurtma rasmi";
+            img.style.width = "100%";
+            img.style.height = "84px";
+            img.style.objectFit = "cover";
+            img.style.borderRadius = "10px";
+            img.style.border = "1px solid var(--border)";
+            a.appendChild(img);
+            grid.appendChild(a);
+          });
+          photosSectionEl.appendChild(grid);
+        } else {
+          const empty = document.createElement("p");
+          empty.className = "muted";
+          empty.style.margin = "0";
+          empty.textContent = "Rasm yo'q";
+          photosSectionEl.appendChild(empty);
+        }
+
+        if (user.role === "customer" && photos.length < MAX_ORDER_PHOTOS) {
+          const label = document.createElement("label");
+          label.style.margin = "10px 0 4px";
+          label.style.fontSize = "0.85rem";
+          label.textContent = "Rasm qo'shish";
+          const input = document.createElement("input");
+          input.type = "file";
+          input.accept = "image/jpeg,image/png";
+          input.multiple = true;
+          input.addEventListener("change", async () => {
+            if (!input.files.length) return;
+            const fd = new FormData();
+            for (const f of input.files) fd.append("files", f);
+            input.disabled = true;
+            try {
+              await apiFetch("/orders/" + order.id + "/photos", { method: "POST", body: fd });
+              toast("Rasm yuklandi", "success");
+              loadOrder();
+            } catch (err) {
+              toast(err.message, "error");
+              input.disabled = false;
+            }
+          });
+          photosSectionEl.append(label, input);
+        }
+      }
 
       function renderTimeline(history) {
         timelineListEl.replaceChildren();
@@ -414,6 +486,7 @@
             orderNoteBox.style.display = "none";
           }
 
+          renderPhotos(order);
           renderPriceBlock(order);
           renderTimeline(order.history);
           renderReviewBlock(order);

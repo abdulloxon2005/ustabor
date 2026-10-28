@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, status
+from fastapi import APIRouter, Body, Depends, File, HTTPException, Path, Query, UploadFile, status
 from sqlalchemy import exists, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.api.deps import require_role
 from app.core.config import MAX_DB_INT
 from app.db.session import get_db
-from app.models import Category, MasterProfile, MasterService, Order, OrderOffer, Review, User
+from app.models import Category, MasterPhoto, MasterProfile, MasterService, Order, OrderOffer, Review, User
 from app.models.enums import OfferStatus, OrderStatus, PricingType, QuoteStatus, Role
 from app.schemas.master import (
     AvailabilityIn,
@@ -24,14 +24,20 @@ from app.schemas.master import (
     ServiceIn,
     ServiceOut,
 )
+from app.schemas.photo import PhotoOut
 from app.schemas.quote import QuoteOut
 from app.schemas.review import MasterReviewItem, MasterReviewsOut
-from app.services import matching
+from app.services import matching, storage
 
 router = APIRouter(prefix="/masters", tags=["masters"])
 
+MAX_MASTER_PHOTOS = 10
+
 NO_PROFILE = "Usta profili topilmadi. Avval profil yarating"
-_with_services = selectinload(MasterProfile.services).selectinload(MasterService.category)
+_with_services = (
+    selectinload(MasterProfile.services).selectinload(MasterService.category),
+    selectinload(MasterProfile.photos),
+)
 
 
 def _services_out(profile: MasterProfile, only_active: bool) -> list[ServiceOut]:
@@ -59,6 +65,10 @@ def _public(profile: MasterProfile) -> MasterPublicOut:
         rating_avg=profile.rating_avg,
         rating_count=profile.rating_count,
         services=_services_out(profile, only_active=True),
+        photos=[
+            PhotoOut(id=p.id, url=storage.url_for(p.file_path), created_at=p.created_at)
+            for p in (profile.photos or [])
+        ],
     )
 
 
@@ -73,7 +83,7 @@ def _me(profile: MasterProfile) -> MasterMeOut:
 def _own_profile(db: Session, user: User) -> MasterProfile:
     """Faqat chaqiruvchining o'z profili (id so'rovdan olinmaydi)."""
     profile = db.scalar(
-        select(MasterProfile).where(MasterProfile.user_id == user.id).options(_with_services)
+        select(MasterProfile).where(MasterProfile.user_id == user.id).options(*_with_services)
     )
     if profile is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, NO_PROFILE)
@@ -179,6 +189,61 @@ def set_availability(
     profile.is_available = data.is_available
     db.commit()
     return _me(_own_profile(db, user))
+
+
+# ---------- Portfolio rasmlari ----------
+
+
+@router.post(
+    "/me/photos", response_model=list[PhotoOut], status_code=status.HTTP_201_CREATED
+)
+async def upload_my_photos(
+    files: list[UploadFile] = File(...),
+    user: User = Depends(require_role(Role.MASTER)),
+    db: Session = Depends(get_db),
+):
+    profile = _own_profile(db, user)
+
+    existing = db.scalar(
+        select(func.count(MasterPhoto.id)).where(MasterPhoto.master_id == profile.id)
+    )
+    if (existing or 0) + len(files) > MAX_MASTER_PHOTOS:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            f"Portfolioga ko'pi bilan {MAX_MASTER_PHOTOS} ta rasm yuklash mumkin",
+        )
+
+    saved: list[MasterPhoto] = []
+    for f in files:
+        rel_path = await storage.save_image(f, "master_photos")
+        photo = MasterPhoto(master_id=profile.id, file_path=rel_path)
+        db.add(photo)
+        saved.append(photo)
+    db.commit()
+    for p in saved:
+        db.refresh(p)
+
+    return [
+        PhotoOut(id=p.id, url=storage.url_for(p.file_path), created_at=p.created_at)
+        for p in saved
+    ]
+
+
+@router.delete("/me/photos/{photo_id}")
+def delete_my_photo(
+    photo_id: int = Path(..., le=MAX_DB_INT),
+    user: User = Depends(require_role(Role.MASTER)),
+    db: Session = Depends(get_db),
+):
+    profile = _own_profile(db, user)
+    photo = db.get(MasterPhoto, photo_id)
+    if photo is None or photo.master_id != profile.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Rasm topilmadi")
+
+    storage.delete_image(photo.file_path)
+    db.delete(photo)
+    db.commit()
+    return {"detail": "Rasm o'chirildi"}
 
 
 def _is_expired(expires_at: datetime | None) -> bool:
@@ -342,7 +407,7 @@ def list_masters(
             MasterProfile.is_available.is_(True),
             User.is_active.is_(True),
         )
-        .options(_with_services, selectinload(MasterProfile.user))
+        .options(*_with_services, selectinload(MasterProfile.user))
         .order_by(
             MasterProfile.rating_avg.desc(),
             MasterProfile.rating_count.desc(),
@@ -377,7 +442,7 @@ def get_master(
             MasterProfile.is_approved.is_(True),
             User.is_active.is_(True),
         )
-        .options(_with_services, selectinload(MasterProfile.user))
+        .options(*_with_services, selectinload(MasterProfile.user))
     )
     if profile is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Usta topilmadi")

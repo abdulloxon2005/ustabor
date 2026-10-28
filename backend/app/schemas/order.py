@@ -145,6 +145,7 @@ class OrderDetailOut(BaseModel):
     review: OrderReviewOut | None = None
     can_review: bool = False
     note: str | None = None
+    photos: list[str] = []
 
 
 class OrderCompleteOut(BaseModel):

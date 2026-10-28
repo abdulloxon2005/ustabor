@@ -51,6 +51,8 @@ PERMISSION_TABLE: dict[tuple[str, str], str | set[str]] = {
     ("PATCH", "/api/v1/masters/me/availability"): {"master"},
     ("GET", "/api/v1/masters/me/orders"): {"master"},
     ("GET", "/api/v1/masters/me/earnings"): {"master"},
+    ("POST", "/api/v1/masters/me/photos"): {"master"},
+    ("DELETE", "/api/v1/masters/me/photos/{photo_id}"): {"master"},
     # Customer order routes
     ("POST", "/api/v1/orders"): {"customer"},
     ("GET", "/api/v1/orders"): {"customer"},
@@ -60,6 +62,8 @@ PERMISSION_TABLE: dict[tuple[str, str], str | set[str]] = {
     ("POST", "/api/v1/orders/{order_id}/quotes/{quote_id}/accept"): {"customer"},
     ("POST", "/api/v1/orders/{order_id}/quotes/{quote_id}/reject"): {"customer"},
     ("POST", "/api/v1/orders/{order_id}/review"): {"customer"},
+    ("POST", "/api/v1/orders/{order_id}/photos"): {"customer"},
+    ("DELETE", "/api/v1/orders/{order_id}/photos/{photo_id}"): {"customer"},
     # Master order action routes
     ("POST", "/api/v1/orders/{order_id}/accept"): {"master"},
     ("POST", "/api/v1/orders/{order_id}/reject"): {"master"},

@@ -38,6 +38,9 @@
       <input id="address" name="address" type="text" autocomplete="street-address"
              maxlength="255" placeholder="Ko'cha, uy raqami" required />
 
+      <label for="photos">Rasm (ixtiyoriy, muammoni ko'rsatish uchun, 5 tagacha)</label>
+      <input id="photos" name="photos" type="file" accept="image/jpeg,image/png" multiple />
+
       <label id="mode-label">Usta tanlash usuli</label>
       <div class="segmented" role="radiogroup" aria-labelledby="mode-label">
         <label>
@@ -147,10 +150,28 @@
         if (!payload.district) { errorEl.textContent = "Tumanni kiriting"; return; }
         if (!payload.address) { errorEl.textContent = "Manzilni kiriting"; return; }
 
+        const photoFiles = form.photos.files;
+        if (photoFiles.length > 5) {
+          errorEl.textContent = "Ko'pi bilan 5 ta rasm yuklash mumkin";
+          return;
+        }
+
         submit.disabled = true;
         submit.textContent = "Yuborilmoqda...";
         try {
           const res = await apiFetch("/orders", { method: "POST", body: JSON.stringify(payload) });
+
+          if (photoFiles.length) {
+            const fd = new FormData();
+            for (const f of photoFiles) fd.append("files", f);
+            try {
+              await apiFetch("/orders/" + res.id + "/photos", { method: "POST", body: fd });
+            } catch (photoErr) {
+              // Buyurtma allaqachon yaratilgan: rasm xatosi butun oqimni to'xtatmaydi
+              toast("Buyurtma yaratildi, lekin rasm yuklanmadi: " + photoErr.message, "error");
+            }
+          }
+
           if (payload.selection_mode === "manual") {
             const q = new URLSearchParams({
               category_id: payload.category_id,

@@ -51,6 +51,9 @@ class Order(IdTimestampMixin, Base):
     )
     offers: Mapped[list["OrderOffer"]] = relationship(back_populates="order")
     quotes: Mapped[list["Quote"]] = relationship(back_populates="order")
+    photos: Mapped[list["OrderPhoto"]] = relationship(
+        back_populates="order", cascade="all, delete-orphan", order_by="OrderPhoto.id"
+    )
 
 
 class OrderOffer(IdTimestampMixin, Base):

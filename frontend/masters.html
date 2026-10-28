@@ -90,6 +90,18 @@
       place.textContent = m.city + ", " + m.district;
       card.append(head, place);
 
+      if (m.photos && m.photos.length) {
+        const thumb = document.createElement("img");
+        thumb.src = API_BASE.replace("/api/v1", "") + m.photos[0].url;
+        thumb.alt = m.full_name + " portfolio rasmi";
+        thumb.style.width = "100%";
+        thumb.style.height = "140px";
+        thumb.style.objectFit = "cover";
+        thumb.style.borderRadius = "10px";
+        thumb.style.margin = "8px 0 0";
+        card.appendChild(thumb);
+      }
+
       if (m.bio) {
         const bio = document.createElement("p");
         bio.style.margin = "8px 0 0";

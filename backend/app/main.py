@@ -1,8 +1,10 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.api.v1.router import api_router
 from app.core.config import settings
+from app.services.storage import UPLOADS_DIR
 
 _is_prod = settings.ENVIRONMENT == "production"
 
@@ -24,6 +26,9 @@ app.add_middleware(
 )
 
 app.include_router(api_router, prefix=settings.API_PREFIX)
+
+UPLOADS_DIR.mkdir(exist_ok=True)
+app.mount("/media", StaticFiles(directory=str(UPLOADS_DIR)), name="media")
 
 
 @app.get("/", include_in_schema=False)

@@ -117,6 +117,18 @@
           Xizmatlarni saqlash
         </button>
       </form>
+
+      <!-- Portfolio rasmlari -->
+      <div class="card">
+        <h2 style="margin-top: 0;">Portfolio (ish namunalari)</h2>
+        <p class="muted" style="margin: 0 0 12px;">
+          Oldingi ishlaringiz rasmlarini qo'shing — mijozlar profilingizda ko'radi.
+        </p>
+        <div id="photosGrid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; margin-bottom: 10px;"></div>
+        <label for="photosInput">Rasm qo'shish (JPG/PNG, 10 tagacha)</label>
+        <input id="photosInput" type="file" accept="image/jpeg,image/png" multiple />
+        <div id="photosError" class="form-error" role="alert"></div>
+      </div>
     </section>
   </main>
 
@@ -169,9 +181,78 @@
       const servicesSuccess = document.getElementById("servicesSuccess");
       const saveServicesBtn = document.getElementById("saveServicesBtn");
 
+      const photosGrid = document.getElementById("photosGrid");
+      const photosInput = document.getElementById("photosInput");
+      const photosError = document.getElementById("photosError");
+      const MAX_MASTER_PHOTOS = 10;
+
       let categoriesData = [];
       let currentProfile = null;
       let serviceRowRefs = [];
+
+      function renderPhotosGrid(profile) {
+        photosGrid.replaceChildren();
+        const photos = profile.photos || [];
+        photos.forEach((photo) => {
+          const wrap = document.createElement("div");
+          wrap.style.position = "relative";
+
+          const img = document.createElement("img");
+          img.src = API_BASE.replace("/api/v1", "") + photo.url;
+          img.alt = "Portfolio rasmi";
+          img.style.width = "100%";
+          img.style.height = "84px";
+          img.style.objectFit = "cover";
+          img.style.borderRadius = "10px";
+          img.style.border = "1px solid var(--border)";
+
+          const delBtn = document.createElement("button");
+          delBtn.type = "button";
+          delBtn.textContent = "✕";
+          delBtn.setAttribute("aria-label", "Rasmni o'chirish");
+          delBtn.style.position = "absolute";
+          delBtn.style.top = "4px";
+          delBtn.style.right = "4px";
+          delBtn.style.width = "24px";
+          delBtn.style.height = "24px";
+          delBtn.style.minHeight = "0";
+          delBtn.style.padding = "0";
+          delBtn.style.border = "0";
+          delBtn.style.borderRadius = "999px";
+          delBtn.style.background = "rgba(17,24,39,0.75)";
+          delBtn.style.color = "#fff";
+          delBtn.style.cursor = "pointer";
+          delBtn.addEventListener("click", async () => {
+            if (!(await confirmModal("Bu rasmni o'chirishni xohlaysizmi?"))) return;
+            try {
+              await apiFetch("/masters/me/photos/" + photo.id, { method: "DELETE" });
+              loadPage();
+            } catch (err) {
+              toast(err.message, "error");
+            }
+          });
+
+          wrap.append(img, delBtn);
+          photosGrid.appendChild(wrap);
+        });
+        photosInput.disabled = photos.length >= MAX_MASTER_PHOTOS;
+      }
+
+      photosInput.addEventListener("change", async () => {
+        if (!photosInput.files.length) return;
+        photosError.textContent = "";
+        const fd = new FormData();
+        for (const f of photosInput.files) fd.append("files", f);
+        photosInput.disabled = true;
+        try {
+          await apiFetch("/masters/me/photos", { method: "POST", body: fd });
+          photosInput.value = "";
+          loadPage();
+        } catch (err) {
+          photosError.textContent = err.message;
+          photosInput.disabled = false;
+        }
+      });
 
       function updateApprovalBanner(profile) {
         if (profile.is_approved) {
@@ -336,6 +417,7 @@
         editBio.value = profile.bio || "";
 
         renderServicesRows(categories, profile.services || []);
+        renderPhotosGrid(profile);
       }
 
       async function loadPage() {

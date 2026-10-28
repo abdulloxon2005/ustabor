@@ -6,17 +6,20 @@ from app.models.notification import Notification
 from app.models.order import Order, OrderOffer, OrderStatusHistory, Quote
 from app.models.otp import LoginAttempt, OtpCode
 from app.models.payment import Payment
+from app.models.photo import MasterPhoto, OrderPhoto
 from app.models.review import Review
 from app.models.user import User
 
 __all__ = [
     "Category",
     "LoginAttempt",
+    "MasterPhoto",
     "MasterProfile",
     "MasterService",
     "Notification",
     "Order",
     "OrderOffer",
+    "OrderPhoto",
     "OrderStatusHistory",
     "OtpCode",
     "Payment",

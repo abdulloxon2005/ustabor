@@ -13,6 +13,7 @@ from pydantic import (
 
 from app.core.config import MAX_DB_INT
 from app.models.enums import OrderStatus, PricingType
+from app.schemas.photo import PhotoOut
 from app.schemas.quote import QuoteOut
 
 MAX_PRICE = 1_000_000_000  # 1 mlrd so'm: aqlga sig'adigan yuqori chegara
@@ -126,6 +127,7 @@ class MasterPublicOut(BaseModel):
     rating_avg: float
     rating_count: int
     services: list[ServiceOut]
+    photos: list[PhotoOut] = []
 
 
 class MasterMeOut(MasterPublicOut):

@@ -18,6 +18,9 @@ backups/
 # Mock SMS chiqishi (faqat lokal qo'lda sinash uchun)
 sms_outbox.log
 
+# Yuklangan rasmlar (lokal fayl saqlash)
+uploads/
+
 # Tizim / muharrir
 .DS_Store
 .idea/
