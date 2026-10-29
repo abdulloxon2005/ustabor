@@ -88,6 +88,9 @@
         <label for="editDistrict">Tuman</label>
         <input id="editDistrict" name="district" type="text" autocomplete="address-level3" maxlength="80" placeholder="Chilonzor" required />
 
+        <label>Joylashuv (xaritada, ixtiyoriy)</label>
+        <div id="mapContainer"></div>
+
         <label for="editBio">O'zingiz va tajribangiz haqida</label>
         <textarea id="editBio" name="bio" maxlength="1000" placeholder="Tajribangiz va ish tartibingiz haqida..."></textarea>
 
@@ -211,6 +214,7 @@
       let categoriesData = [];
       let currentProfile = null;
       let serviceRowRefs = [];
+      let profileMapPicker = null;
 
       function renderScheduleRows(schedule) {
         scheduleRows.replaceChildren();
@@ -516,6 +520,14 @@
         editDistrict.value = profile.district || "";
         editBio.value = profile.bio || "";
 
+        if (!profileMapPicker) {
+          profileMapPicker = createMapPicker({
+            initialLat: profile.latitude,
+            initialLon: profile.longitude,
+          });
+          document.getElementById("mapContainer").appendChild(profileMapPicker.el);
+        }
+
         renderServicesRows(categories, profile.services || []);
         renderPhotosGrid(profile);
         renderScheduleRows(profile.schedule);
@@ -647,10 +659,17 @@
         editProfileBtn.disabled = true;
         editProfileBtn.textContent = "Saqlanmoqda...";
 
+        const payload = { city, district, bio };
+        const coords = profileMapPicker ? profileMapPicker.getCoords() : null;
+        if (coords) {
+          payload.latitude = coords[0];
+          payload.longitude = coords[1];
+        }
+
         try {
           const updated = await apiFetch("/masters/me", {
             method: "PATCH",
-            body: JSON.stringify({ city, district, bio }),
+            body: JSON.stringify(payload),
           });
           currentProfile = updated;
           updateApprovalBanner(updated);

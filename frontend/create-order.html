@@ -38,6 +38,9 @@
       <input id="address" name="address" type="text" autocomplete="street-address"
              maxlength="255" placeholder="Ko'cha, uy raqami" required />
 
+      <label>Xaritada belgilash (ixtiyoriy)</label>
+      <div id="mapContainer"></div>
+
       <label for="photos">Rasm (ixtiyoriy, muammoni ko'rsatish uchun, 5 tagacha)</label>
       <input id="photos" name="photos" type="file" accept="image/jpeg,image/png" multiple />
 
@@ -80,6 +83,9 @@
       const catSelect = document.getElementById("category");
 
       const preselect = new URLSearchParams(window.location.search).get("category_id");
+
+      const mapPicker = createMapPicker({});
+      document.getElementById("mapContainer").appendChild(mapPicker.el);
 
       function loadCategories() {
         catRetryBox.style.display = "none";
@@ -144,6 +150,12 @@
           selection_mode: form.selection_mode.value,
         };
 
+        const coords = mapPicker.getCoords();
+        if (coords) {
+          payload.latitude = coords[0];
+          payload.longitude = coords[1];
+        }
+
         if (!payload.category_id) { errorEl.textContent = "Xizmat turini tanlang"; return; }
         if (payload.description.length < 5) { errorEl.textContent = "Tavsif kamida 5 ta belgidan iborat bo'lishi kerak"; return; }
         if (!payload.city) { errorEl.textContent = "Shaharni kiriting"; return; }
@@ -179,6 +191,10 @@
               district: payload.district,
               order_id: res.id,
             });
+            if (payload.latitude != null) {
+              q.set("lat", payload.latitude);
+              q.set("lon", payload.longitude);
+            }
             window.location.replace("masters.html?" + q.toString());
           } else {
             if (res.note) {

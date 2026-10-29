@@ -18,7 +18,10 @@ from sqlalchemy.orm import Session, selectinload
 from app.core.config import settings
 from app.models import MasterProfile, MasterService, Order, OrderOffer, Review, User
 from app.models.enums import OfferStatus, OrderStatus, SelectionMode
-from app.services import notify
+from app.services import geo, notify
+
+# Shu masofadan (km) uzoqda masofa bonusi 0 ga tushadi (chiziqli pasayish)
+DISTANCE_DECAY_KM = 20.0
 
 
 # ---------- Bayes reyting ----------
@@ -58,8 +61,12 @@ def score_master(master: MasterProfile, order: Order, global_avg: float) -> floa
       bayes_norm = bayes / 5.0   (5 - maksimal ball, natija [0..1])
       district_bonus = 1.0 agar tuman mos, 0.5 agar faqat shahar mos, 0 aks holda
       new_bonus = 0.5 agar rating_count < MATCH_NEW_MASTER_THRESHOLD, 0.0 aks holda
+      distance_bonus = max(0, 1 - masofa_km / DISTANCE_DECAY_KM) agar ikkala tomonda
+        koordinata bo'lsa, aks holda 0 (orqaga mos: koordinatasiz hamma eski
+        natijani oladi).
 
-      score = W_RATING * bayes_norm + W_DISTRICT * district_bonus + W_NEW * new_bonus
+      score = W_RATING * bayes_norm + W_DISTRICT * district_bonus
+            + W_NEW * new_bonus + W_DISTANCE * distance_bonus
 
     Yangi usta bonusi (0.15 * 0.5 = 0.075) reyting vaznidan (0.6 * ~0.8 = 0.48)
     ancha kichik, shuning uchun bitta 5 yulduzli sharh 50 ta 4.8 li ustadan
@@ -77,10 +84,24 @@ def score_master(master: MasterProfile, order: Order, global_avg: float) -> floa
     # Yangi usta bonusi
     new_bonus = 0.5 if master.rating_count < settings.MATCH_NEW_MASTER_THRESHOLD else 0.0
 
+    # Masofa bonusi: ikkala tomonda koordinata bo'lsagina hisoblanadi
+    distance_bonus = 0.0
+    if (
+        master.latitude is not None
+        and master.longitude is not None
+        and order.latitude is not None
+        and order.longitude is not None
+    ):
+        dist_km = geo.haversine_km(
+            master.latitude, master.longitude, order.latitude, order.longitude
+        )
+        distance_bonus = max(0.0, 1.0 - dist_km / DISTANCE_DECAY_KM)
+
     return (
         settings.MATCH_W_RATING * bayes_norm
         + settings.MATCH_W_DISTRICT * district_bonus
         + settings.MATCH_W_NEW_BONUS * new_bonus
+        + settings.MATCH_W_DISTANCE * distance_bonus
     )
 
 

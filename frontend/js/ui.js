@@ -380,3 +380,189 @@ function createDisputeWidget(orderId) {
   load();
   return { el: wrap, reload: load };
 }
+
+// ================= Yandex xarita: joylashuv tanlagich =================
+
+function haversineKm(lat1, lon1, lat2, lon2) {
+  const R = 6371.0;
+  const toRad = (d) => (d * Math.PI) / 180;
+  const dPhi = toRad(lat2 - lat1);
+  const dLambda = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dPhi / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLambda / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+const TASHKENT_CENTER = [41.2995, 69.2401];
+let _yandexMapsLoadPromise = null;
+
+function _loadYandexMaps(apiKey) {
+  if (window.ymaps) return Promise.resolve(window.ymaps);
+  if (_yandexMapsLoadPromise) return _yandexMapsLoadPromise;
+  _yandexMapsLoadPromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "https://api-maps.yandex.ru/2.1/?apikey=" + encodeURIComponent(apiKey) + "&lang=uz_UZ";
+    script.onload = () => window.ymaps.ready(() => resolve(window.ymaps));
+    script.onerror = () => reject(new Error("Xarita kutubxonasi yuklanmadi"));
+    document.head.appendChild(script);
+  });
+  return _yandexMapsLoadPromise;
+}
+
+// coords: [lat, lon] | null. onChange(lat, lon) xaritada belgi o'zgarganda chaqiriladi.
+function createMapPicker({ initialLat, initialLon, onChange } = {}) {
+  const wrap = document.createElement("div");
+  wrap.className = "map-picker";
+
+  const searchRow = document.createElement("div");
+  searchRow.style.display = "flex";
+  searchRow.style.gap = "8px";
+  searchRow.style.marginBottom = "8px";
+
+  const searchInput = document.createElement("input");
+  searchInput.type = "text";
+  searchInput.placeholder = "Manzilni qidirish...";
+  searchInput.style.flex = "1";
+  searchInput.style.margin = "0";
+
+  const searchBtn = document.createElement("button");
+  searchBtn.type = "button";
+  searchBtn.className = "btn btn-outline";
+  searchBtn.style.width = "auto";
+  searchBtn.style.padding = "0 14px";
+  searchBtn.textContent = "Qidirish";
+
+  searchRow.append(searchInput, searchBtn);
+
+  const resultsList = document.createElement("div");
+  resultsList.style.display = "flex";
+  resultsList.style.flexDirection = "column";
+  resultsList.style.gap = "4px";
+  resultsList.style.marginBottom = "8px";
+
+  const mapEl = document.createElement("div");
+  mapEl.style.height = "280px";
+  mapEl.style.borderRadius = "10px";
+  mapEl.style.overflow = "hidden";
+  mapEl.style.background = "var(--bg)";
+
+  const stateEl = document.createElement("p");
+  stateEl.className = "muted";
+  stateEl.style.margin = "6px 0 0";
+  stateEl.style.fontSize = "0.85rem";
+
+  wrap.append(searchRow, resultsList, mapEl, stateEl);
+
+  let map = null;
+  let placemark = null;
+  let coords = initialLat != null && initialLon != null ? [initialLat, initialLon] : null;
+
+  function notify() {
+    if (coords && onChange) onChange(coords[0], coords[1]);
+  }
+
+  function placePin(lat, lon, recenter) {
+    coords = [lat, lon];
+    if (map) {
+      if (placemark) {
+        placemark.geometry.setCoordinates([lat, lon]);
+      } else {
+        placemark = new ymaps.Placemark([lat, lon], {}, { draggable: true });
+        placemark.events.add("dragend", () => {
+          const c = placemark.geometry.getCoordinates();
+          coords = c;
+          notify();
+        });
+        map.geoObjects.add(placemark);
+      }
+      if (recenter) map.setCenter([lat, lon], 15, { duration: 300 });
+    }
+    notify();
+  }
+
+  async function doSearch() {
+    const q = searchInput.value.trim();
+    if (q.length < 3) return;
+    resultsList.replaceChildren();
+    searchBtn.disabled = true;
+    try {
+      const items = await apiFetch("/geo/search?q=" + encodeURIComponent(q));
+      if (!items.length) {
+        const p = document.createElement("p");
+        p.className = "muted";
+        p.style.margin = "0";
+        p.textContent = "Hech narsa topilmadi";
+        resultsList.appendChild(p);
+        return;
+      }
+      items.forEach((item) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "btn btn-outline";
+        btn.style.textAlign = "left";
+        btn.style.fontSize = "0.85rem";
+        btn.textContent = item.address;
+        btn.addEventListener("click", () => {
+          placePin(item.latitude, item.longitude, true);
+          resultsList.replaceChildren();
+        });
+        resultsList.appendChild(btn);
+      });
+    } catch (e) {
+      stateEl.textContent = "Qidirishda xatolik: " + e.message;
+    } finally {
+      searchBtn.disabled = false;
+    }
+  }
+
+  searchBtn.addEventListener("click", doSearch);
+  searchInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      doSearch();
+    }
+  });
+
+  (async () => {
+    stateEl.textContent = "Xarita yuklanmoqda...";
+    let cfg;
+    try {
+      cfg = await apiFetch("/geo/config");
+    } catch (e) {
+      stateEl.textContent = "Xarita sozlamalarini olishda xatolik";
+      mapEl.style.display = "none";
+      return;
+    }
+    if (!cfg.yandex_maps_key) {
+      stateEl.textContent = "Xarita xizmati sozlanmagan";
+      mapEl.style.display = "none";
+      return;
+    }
+    try {
+      await _loadYandexMaps(cfg.yandex_maps_key);
+    } catch (e) {
+      stateEl.textContent = e.message;
+      mapEl.style.display = "none";
+      return;
+    }
+    const center = coords || TASHKENT_CENTER;
+    map = new ymaps.Map(mapEl, {
+      center,
+      zoom: coords ? 15 : 11,
+      controls: ["zoomControl"],
+    });
+    map.events.add("click", (e) => {
+      const c = e.get("coords");
+      placePin(c[0], c[1], false);
+    });
+    if (coords) placePin(coords[0], coords[1], false);
+    stateEl.textContent = "Manzilni qidiring yoki xaritada belgini bosing/suring";
+  })();
+
+  return {
+    el: wrap,
+    getCoords: () => coords,
+  };
+}

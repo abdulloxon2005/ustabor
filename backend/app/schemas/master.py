@@ -52,6 +52,8 @@ class ProfileUpdate(BaseModel):
     bio: str | None = Field(default=None, max_length=1000)
     city: str | None = Field(default=None, min_length=1, max_length=80)
     district: str | None = Field(default=None, min_length=1, max_length=80)
+    latitude: float | None = Field(default=None, ge=-90, le=90)
+    longitude: float | None = Field(default=None, ge=-180, le=180)
 
     @model_validator(mode="before")
     @classmethod
@@ -65,6 +67,13 @@ class ProfileUpdate(BaseModel):
         for f in self.model_fields_set:
             if getattr(self, f) is None:
                 raise ValueError("Maydon bo'sh (null) bo'lishi mumkin emas")
+        return self
+
+    @model_validator(mode="after")
+    def _coords_together(self):
+        fields = self.model_fields_set
+        if ("latitude" in fields) != ("longitude" in fields):
+            raise ValueError("latitude va longitude ikkalasi birga berilishi kerak")
         return self
 
     @field_validator("city")
@@ -154,6 +163,8 @@ class MasterPublicOut(BaseModel):
     bio: str
     city: str
     district: str
+    latitude: float | None = None
+    longitude: float | None = None
     is_available: bool
     rating_avg: float
     rating_count: int

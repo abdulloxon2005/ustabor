@@ -78,6 +78,8 @@ def _public(profile: MasterProfile) -> MasterPublicOut:
         bio=profile.bio,
         city=profile.city,
         district=profile.district,
+        latitude=profile.latitude,
+        longitude=profile.longitude,
         is_available=profile.is_available,
         rating_avg=profile.rating_avg,
         rating_count=profile.rating_count,

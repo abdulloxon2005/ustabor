@@ -52,6 +52,10 @@
     const categoryId = rawCat && /^\d+$/.test(rawCat) ? rawCat : null;
     const rawOrderId = params.get("order_id");
     const orderId = rawOrderId && /^\d+$/.test(rawOrderId) ? rawOrderId : null;
+    const rawLat = params.get("lat");
+    const rawLon = params.get("lon");
+    const orderLat = rawLat && !isNaN(parseFloat(rawLat)) ? parseFloat(rawLat) : null;
+    const orderLon = rawLon && !isNaN(parseFloat(rawLon)) ? parseFloat(rawLon) : null;
     const user = getToken() ? getUser() : null;
 
     const form = document.getElementById("filters");
@@ -151,6 +155,10 @@
       place.className = "muted";
       place.style.margin = "4px 0 0";
       place.textContent = m.city + ", " + m.district;
+      if (orderLat != null && orderLon != null && m.latitude != null && m.longitude != null) {
+        const distKm = haversineKm(orderLat, orderLon, m.latitude, m.longitude);
+        place.textContent += " · ~" + (distKm < 10 ? distKm.toFixed(1) : Math.round(distKm)) + " km";
+      }
       card.append(head, place);
 
       if (m.schedule && m.schedule.length) {

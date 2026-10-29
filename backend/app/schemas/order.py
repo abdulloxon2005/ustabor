@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator, model_validator
 
 from app.core.config import MAX_DB_INT
 from app.models.enums import OrderStatus, SelectionMode
@@ -25,6 +25,8 @@ class OrderCreate(BaseModel):
     district: str = Field(min_length=1, max_length=80)
     address: str = Field(min_length=1, max_length=255)
     selection_mode: Literal["manual", "automatic"]
+    latitude: float | None = Field(default=None, ge=-90, le=90)
+    longitude: float | None = Field(default=None, ge=-180, le=180)
 
     @field_validator("description")
     @classmethod
@@ -48,6 +50,12 @@ class OrderCreate(BaseModel):
     @classmethod
     def _address(cls, v: str) -> str:
         return _clean(v, "Manzil")
+
+    @model_validator(mode="after")
+    def _coords_together(self) -> "OrderCreate":
+        if (self.latitude is None) != (self.longitude is None):
+            raise ValueError("latitude va longitude ikkalasi birga berilishi kerak")
+        return self
 
 
 class SelectMasterIn(BaseModel):
@@ -89,6 +97,8 @@ class OrderOut(BaseModel):
     city: str
     district: str
     address: str
+    latitude: float | None = None
+    longitude: float | None = None
     status: OrderStatus
     selection_mode: SelectionMode
     agreed_price: int | None
@@ -108,6 +118,8 @@ class OrderListItem(BaseModel):
     description: str
     city: str
     district: str
+    latitude: float | None = None
+    longitude: float | None = None
     status: OrderStatus
     selection_mode: SelectionMode
     agreed_price: int | None
@@ -133,6 +145,8 @@ class OrderDetailOut(BaseModel):
     city: str
     district: str
     address: str
+    latitude: float | None = None
+    longitude: float | None = None
     status: OrderStatus
     selection_mode: SelectionMode
     agreed_price: int | None = None

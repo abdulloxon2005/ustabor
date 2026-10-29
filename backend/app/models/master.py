@@ -39,6 +39,9 @@ class MasterProfile(IdTimestampMixin, Base):
     )
     rating_avg: Mapped[float] = mapped_column(Float, default=0.0, server_default="0")
     rating_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # Yandex xaritadan belgilangan joylashuv (ixtiyoriy)
+    latitude: Mapped[Optional[float]] = mapped_column(Float)
+    longitude: Mapped[Optional[float]] = mapped_column(Float)
 
     user: Mapped["User"] = relationship(back_populates="master_profile")
     services: Mapped[list["MasterService"]] = relationship(

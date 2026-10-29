@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.v1 import admin, auth, categories, health, masters, notifications, orders
+from app.api.v1 import admin, auth, categories, geo, health, masters, notifications, orders
 
 api_router = APIRouter()
 api_router.include_router(health.router)
@@ -10,3 +10,4 @@ api_router.include_router(masters.router)
 api_router.include_router(orders.router)
 api_router.include_router(notifications.router)
 api_router.include_router(admin.router)
+api_router.include_router(geo.router)

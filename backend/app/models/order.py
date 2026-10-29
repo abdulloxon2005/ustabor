@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.config import settings
@@ -29,6 +29,9 @@ class Order(IdTimestampMixin, Base):
     city: Mapped[str] = mapped_column(String(80))
     district: Mapped[str] = mapped_column(String(80))
     address: Mapped[str] = mapped_column(String(255))
+    # Yandex geokodlash orqali (ixtiyoriy, manzil matndan aniqlanmasa bo'sh)
+    latitude: Mapped[Optional[float]] = mapped_column(Float)
+    longitude: Mapped[Optional[float]] = mapped_column(Float)
 
     status: Mapped[OrderStatus] = mapped_column(
         enum_type(OrderStatus), default=OrderStatus.SEARCHING, index=True

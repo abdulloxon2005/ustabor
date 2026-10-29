@@ -36,6 +36,7 @@ PERMISSION_TABLE: dict[tuple[str, str], str | set[str]] = {
     ("GET", "/api/v1/masters"): "public",
     ("GET", "/api/v1/masters/{master_id}"): "public",
     ("GET", "/api/v1/masters/{master_id}/reviews"): "public",
+    ("GET", "/api/v1/geo/config"): "public",
     # Authenticated (all active roles)
     ("GET", "/api/v1/auth/me"): {"customer", "master", "admin"},
     ("POST", "/api/v1/auth/change-password"): {"customer", "master", "admin"},
@@ -43,6 +44,7 @@ PERMISSION_TABLE: dict[tuple[str, str], str | set[str]] = {
     ("GET", "/api/v1/notifications/unread-count"): {"customer", "master", "admin"},
     ("POST", "/api/v1/notifications/{notification_id}/read"): {"customer", "master", "admin"},
     ("POST", "/api/v1/notifications/read-all"): {"customer", "master", "admin"},
+    ("GET", "/api/v1/geo/search"): {"customer", "master", "admin"},
     # Master routes
     ("POST", "/api/v1/masters/profile"): {"master"},
     ("GET", "/api/v1/masters/me"): {"master"},
@@ -244,6 +246,8 @@ def _render_request(
         .replace("{category_id}", str(env["cat_id"]))
         .replace("{user_id}", str(env["customer_id"]))
     )
+    if path_template == "/api/v1/geo/search":
+        path += "?q=Toshkent"
 
     bodies: dict[tuple[str, str], dict | list] = {
         ("POST", "/api/v1/auth/register"): {

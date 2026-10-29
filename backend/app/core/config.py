@@ -52,6 +52,11 @@ class Settings(BaseSettings):
     MATCH_W_RATING: float = 0.6    # Bayes reyting
     MATCH_W_DISTRICT: float = 0.25  # Tuman mos kelishi
     MATCH_W_NEW_BONUS: float = 0.15 # Yangi usta bonusi
+    MATCH_W_DISTANCE: float = 0.2   # Masofa bonusi (koordinatalar bo'lsa)
+
+    # ===== Yandex xarita/geokodlash (Bosqich 12) =====
+    # Faqat backendda ishlatiladi (geokodlash proxy). Bo'sh bo'lsa geokodlash o'chirilgan.
+    YANDEX_API_KEY: str = ""
 
     @property
     def cors_origins_list(self) -> list[str]:
