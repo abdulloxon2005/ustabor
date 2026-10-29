@@ -38,6 +38,7 @@
       const retryBtnEl = document.getElementById("retry-btn");
       const listEl = document.getElementById("list");
       const markAllBtn = document.getElementById("mark-all-btn");
+      let takeableOrderIds = new Set();
 
       retryBtnEl.addEventListener("click", () => load());
 
@@ -108,8 +109,14 @@
         meta.textContent = formatDate(n.created_at);
         card.appendChild(meta);
 
-        // Usta uchun: yangi (ochiq) taklifni shu yerdan, bitta tugma bilan olish.
-        if (user.role === "master" && n.type === "new_offer" && n.related_order_id) {
+        // Usta uchun: yangi (ochiq) taklifni shu yerdan, bitta tugma bilan olish —
+        // faqat hali HAQIQATDA faol (muddati o'tmagan, boshqa usta olib ulgurmagan) bo'lsa.
+        if (
+          user.role === "master" &&
+          n.type === "new_offer" &&
+          n.related_order_id &&
+          takeableOrderIds.has(n.related_order_id)
+        ) {
           const takeBtn = document.createElement("button");
           takeBtn.type = "button";
           takeBtn.className = "btn btn-accent btn-block";
@@ -167,7 +174,16 @@
           stateEl.className = "muted";
         }
         try {
-          const items = await apiFetch("/notifications");
+          const requests = [apiFetch("/notifications")];
+          if (user.role === "master") {
+            requests.push(
+              apiFetch("/masters/me/orders").catch(() => ({ pending_offers: [] }))
+            );
+          }
+          const [items, ordersData] = await Promise.all(requests);
+          takeableOrderIds = new Set(
+            (ordersData ? ordersData.pending_offers : []).map((o) => o.order_id)
+          );
           retryBtnEl.disabled = false;
           retryBoxEl.style.display = "none";
           listEl.replaceChildren();
