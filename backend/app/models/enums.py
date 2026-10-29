@@ -54,6 +54,12 @@ class OtpPurpose(str, enum.Enum):
     RESET = "reset"
 
 
+class DisputeStatus(str, enum.Enum):
+    OPEN = "open"
+    RESOLVED = "resolved"
+    REJECTED = "rejected"
+
+
 def enum_type(enum_cls: type[enum.Enum]) -> SAEnum:
     """Enumni bazada VARCHAR sifatida saqlaydi (SQLite va PostgreSQL uchun bir xil).
 

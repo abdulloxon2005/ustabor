@@ -71,6 +71,8 @@ PERMISSION_TABLE: dict[tuple[str, str], str | set[str]] = {
     ("DELETE", "/api/v1/orders/{order_id}/photos/{photo_id}"): {"customer"},
     ("GET", "/api/v1/orders/{order_id}/messages"): {"customer", "master", "admin"},
     ("POST", "/api/v1/orders/{order_id}/messages"): {"customer", "master"},
+    ("GET", "/api/v1/orders/{order_id}/disputes"): {"customer", "master", "admin"},
+    ("POST", "/api/v1/orders/{order_id}/dispute"): {"customer", "master"},
     # Master order action routes
     ("POST", "/api/v1/orders/{order_id}/accept"): {"master"},
     ("POST", "/api/v1/orders/{order_id}/reject"): {"master"},
@@ -88,6 +90,8 @@ PERMISSION_TABLE: dict[tuple[str, str], str | set[str]] = {
     ("GET", "/api/v1/admin/users"): {"admin"},
     ("PATCH", "/api/v1/admin/users/{user_id}/status"): {"admin"},
     ("GET", "/api/v1/admin/commissions"): {"admin"},
+    ("GET", "/api/v1/admin/disputes"): {"admin"},
+    ("PATCH", "/api/v1/admin/disputes/{dispute_id}"): {"admin"},
 }
 
 
@@ -296,6 +300,13 @@ def _render_request(
         },
         ("POST", "/api/v1/orders/{order_id}/messages"): {
             "body": "Qachon kelasiz?",
+        },
+        ("POST", "/api/v1/orders/{order_id}/dispute"): {
+            "reason": "Usta vaqtida kelmadi",
+        },
+        ("PATCH", "/api/v1/admin/disputes/{dispute_id}"): {
+            "status": "resolved",
+            "admin_note": "Ko'rib chiqildi",
         },
         ("POST", "/api/v1/admin/categories"): {
             "name": "Elektrik",

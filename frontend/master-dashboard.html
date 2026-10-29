@@ -399,6 +399,12 @@
         const chatWidget = createChatWidget(order.id, user.id);
         card.appendChild(chatWidget.el);
 
+        if (order.status === "in_progress") {
+          const disputeWidget = createDisputeWidget(order.id);
+          disputeWidget.el.style.marginTop = "12px";
+          card.appendChild(disputeWidget.el);
+        }
+
         return card;
       }
 

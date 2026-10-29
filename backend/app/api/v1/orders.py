@@ -7,8 +7,9 @@ from sqlalchemy.orm import Session, selectinload
 from app.api.deps import get_current_user, require_role
 from app.core.config import MAX_DB_INT, settings
 from app.db.session import get_db
-from app.models import Category, MasterProfile, MasterService, Order, OrderMessage, OrderOffer, OrderPhoto, OrderStatusHistory, Quote, Review, User
-from app.models.enums import OfferStatus, OrderStatus, Role, SelectionMode
+from app.models import Category, Dispute, MasterProfile, MasterService, Order, OrderMessage, OrderOffer, OrderPhoto, OrderStatusHistory, Quote, Review, User
+from app.models.enums import DisputeStatus, OfferStatus, OrderStatus, Role, SelectionMode
+from app.schemas.dispute import DisputeCreate, DisputeOut
 from app.schemas.message import MessageIn, MessageOut
 from app.schemas.order import (
     OfferOut,
@@ -702,35 +703,39 @@ def delete_order_photo(
     return {"detail": "Rasm o'chirildi"}
 
 
-# ---------- Chat ----------
+# ---------- Umumiy: buyurtma ishtirokchisi tekshiruvi (chat va shikoyat) ----------
 
-CHAT_NOT_FOUND = "Buyurtma topilmadi"
-CHAT_FORBIDDEN = "Bu amal uchun ruxsat yo'q"
-CHAT_NOT_OPEN = "Chat faqat usta biriktirilgandan keyin ochiladi"
+PARTICIPANT_NOT_FOUND = "Buyurtma topilmadi"
+PARTICIPANT_FORBIDDEN = "Bu amal uchun ruxsat yo'q"
 
 
-def _order_for_messages(order_id: int, user: User, db: Session) -> tuple[Order, bool]:
+def _order_for_participant(order_id: int, user: User, db: Session) -> tuple[Order, bool]:
     """Qaytaradi: (order, can_write). Mijoz/biriktirilgan usta o'qiy/yoza oladi,
     admin faqat o'qiy oladi. Ruxsat yo'q yoki topilmasa -> 404."""
     order = db.get(Order, order_id)
     if order is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, CHAT_NOT_FOUND)
+        raise HTTPException(status.HTTP_404_NOT_FOUND, PARTICIPANT_NOT_FOUND)
 
     if user.role == Role.CUSTOMER:
         if order.customer_id != user.id:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, CHAT_NOT_FOUND)
+            raise HTTPException(status.HTTP_404_NOT_FOUND, PARTICIPANT_NOT_FOUND)
         return order, True
 
     if user.role == Role.MASTER:
         profile = db.scalar(select(MasterProfile).where(MasterProfile.user_id == user.id))
         if profile is None or order.master_id != profile.id:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, CHAT_NOT_FOUND)
+            raise HTTPException(status.HTTP_404_NOT_FOUND, PARTICIPANT_NOT_FOUND)
         return order, True
 
     if user.role == Role.ADMIN:
         return order, False
 
-    raise HTTPException(status.HTTP_403_FORBIDDEN, CHAT_FORBIDDEN)
+    raise HTTPException(status.HTTP_403_FORBIDDEN, PARTICIPANT_FORBIDDEN)
+
+
+# ---------- Chat ----------
+
+CHAT_NOT_OPEN = "Chat faqat usta biriktirilgandan keyin ochiladi"
 
 
 @router.get("/{order_id}/messages", response_model=list[MessageOut])
@@ -741,7 +746,7 @@ def list_order_messages(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    order, _ = _order_for_messages(order_id, user, db)
+    order, _ = _order_for_participant(order_id, user, db)
 
     limit = min(max(limit, 1), 200)
     offset = min(max(offset, 0), MAX_DB_INT)
@@ -777,9 +782,9 @@ def create_order_message(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    order, can_write = _order_for_messages(order_id, user, db)
+    order, can_write = _order_for_participant(order_id, user, db)
     if not can_write:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, CHAT_FORBIDDEN)
+        raise HTTPException(status.HTTP_403_FORBIDDEN, PARTICIPANT_FORBIDDEN)
     if order.master_id is None:
         raise HTTPException(status.HTTP_409_CONFLICT, CHAT_NOT_OPEN)
 
@@ -796,4 +801,58 @@ def create_order_message(
         body=msg.body,
         created_at=msg.created_at,
     )
+
+
+# ---------- Shikoyat/nizo ----------
+
+DISPUTE_WRONG_STATUS = (
+    "Shikoyat faqat jarayondagi, yakunlangan yoki bekor qilingan buyurtma uchun mumkin"
+)
+DISPUTE_ALREADY_OPEN = "Bu buyurtma bo'yicha allaqachon ko'rib chiqilayotgan shikoyat bor"
+_DISPUTE_ALLOWED_STATUSES = frozenset(
+    {OrderStatus.IN_PROGRESS, OrderStatus.COMPLETED, OrderStatus.CANCELLED}
+)
+
+
+@router.get("/{order_id}/disputes", response_model=list[DisputeOut])
+def list_order_disputes(
+    order_id: int = Path(..., le=MAX_DB_INT),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    order, _ = _order_for_participant(order_id, user, db)
+    rows = db.scalars(
+        select(Dispute).where(Dispute.order_id == order.id).order_by(Dispute.id.desc())
+    ).all()
+    return rows
+
+
+@router.post(
+    "/{order_id}/dispute", response_model=DisputeOut, status_code=status.HTTP_201_CREATED
+)
+def create_dispute(
+    data: DisputeCreate,
+    order_id: int = Path(..., le=MAX_DB_INT),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    order, can_write = _order_for_participant(order_id, user, db)
+    if not can_write:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, PARTICIPANT_FORBIDDEN)
+    if order.status not in _DISPUTE_ALLOWED_STATUSES:
+        raise HTTPException(status.HTTP_409_CONFLICT, DISPUTE_WRONG_STATUS)
+
+    existing_open = db.scalar(
+        select(Dispute).where(
+            Dispute.order_id == order.id, Dispute.status == DisputeStatus.OPEN
+        )
+    )
+    if existing_open is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, DISPUTE_ALREADY_OPEN)
+
+    dispute = Dispute(order_id=order.id, raised_by=user.id, reason=data.reason)
+    db.add(dispute)
+    db.commit()
+    db.refresh(dispute)
+    return dispute
 

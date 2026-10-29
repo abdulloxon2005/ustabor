@@ -2,6 +2,7 @@
 # Base.metadata ga ularning hammasi tushganini shu orqali biladi.
 from app.models.availability import MasterAvailability
 from app.models.category import Category
+from app.models.dispute import Dispute
 from app.models.favorite import Favorite
 from app.models.master import MasterProfile, MasterService
 from app.models.message import OrderMessage
@@ -15,6 +16,7 @@ from app.models.user import User
 
 __all__ = [
     "Category",
+    "Dispute",
     "Favorite",
     "LoginAttempt",
     "MasterAvailability",

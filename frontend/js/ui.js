@@ -247,3 +247,136 @@ function createChatWidget(orderId, currentUserId) {
   load();
   return { el: wrap, reload: load };
 }
+
+const DISPUTE_STATUS_LABELS = {
+  open: "Ko'rib chiqilmoqda",
+  resolved: "Hal qilindi",
+  rejected: "Rad etildi",
+};
+
+// Buyurtma shikoyatini (GET/POST /orders/{id}/disputes, /dispute) ko'rsatuvchi widget.
+// canWrite=false bo'lsa faqat o'qish rejimi (masalan admin uchun ishlatilmaydi, bu yerda shart emas).
+// Qaytaradi: { el, reload }.
+function createDisputeWidget(orderId) {
+  const wrap = document.createElement("div");
+
+  const title = document.createElement("h2");
+  title.style.marginTop = "0";
+  title.textContent = "Shikoyat";
+  wrap.appendChild(title);
+
+  const body = document.createElement("div");
+  wrap.appendChild(body);
+
+  function renderOpen(dispute) {
+    body.replaceChildren();
+    const banner = document.createElement("div");
+    banner.className = "status-banner pending";
+    banner.textContent = "Shikoyatingiz " + DISPUTE_STATUS_LABELS.open.toLowerCase() + ": " + dispute.reason;
+    body.appendChild(banner);
+  }
+
+  function renderResolved(dispute) {
+    body.replaceChildren();
+    const banner = document.createElement("div");
+    banner.className = dispute.status === "resolved" ? "status-banner approved" : "status-banner";
+    if (dispute.status !== "resolved") {
+      banner.style.background = "#fee2e2";
+      banner.style.borderColor = "#fca5a5";
+      banner.style.color = "#991b1b";
+    }
+    const title2 = document.createElement("div");
+    title2.textContent = "Oxirgi shikoyat: " + DISPUTE_STATUS_LABELS[dispute.status];
+    banner.appendChild(title2);
+    if (dispute.admin_note) {
+      const note = document.createElement("div");
+      note.style.fontWeight = "400";
+      note.style.marginTop = "4px";
+      note.style.fontSize = "0.85rem";
+      note.textContent = "Admin izohi: " + dispute.admin_note;
+      banner.appendChild(note);
+    }
+    body.appendChild(banner);
+    appendForm();
+  }
+
+  function appendForm(labelText) {
+    const toggleBtn = document.createElement("button");
+    toggleBtn.type = "button";
+    toggleBtn.className = "btn btn-outline btn-block";
+    toggleBtn.style.marginTop = "8px";
+    toggleBtn.textContent = labelText || "Shikoyat bildirish";
+
+    const form = document.createElement("form");
+    form.style.display = "none";
+    form.style.marginTop = "8px";
+    form.noValidate = true;
+
+    const textarea = document.createElement("textarea");
+    textarea.placeholder = "Muammoni tavsiflang (kamida 5 ta belgi)...";
+    textarea.maxLength = 1000;
+
+    const errEl = document.createElement("div");
+    errEl.className = "form-error";
+    errEl.setAttribute("role", "alert");
+
+    const submitBtn = document.createElement("button");
+    submitBtn.type = "submit";
+    submitBtn.className = "btn btn-danger btn-block";
+    submitBtn.style.marginTop = "8px";
+    submitBtn.textContent = "Shikoyatni yuborish";
+
+    toggleBtn.addEventListener("click", () => {
+      form.style.display = form.style.display === "none" ? "block" : "none";
+    });
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      errEl.textContent = "";
+      const reason = textarea.value.trim();
+      if (reason.length < 5) {
+        errEl.textContent = "Kamida 5 ta belgi kiriting";
+        return;
+      }
+      submitBtn.disabled = true;
+      try {
+        await apiFetch("/orders/" + orderId + "/dispute", {
+          method: "POST",
+          body: JSON.stringify({ reason }),
+        });
+        toast("Shikoyat yuborildi", "success");
+        load();
+      } catch (err) {
+        errEl.textContent = err.message;
+        submitBtn.disabled = false;
+      }
+    });
+
+    form.append(textarea, errEl, submitBtn);
+    body.append(toggleBtn, form);
+  }
+
+  async function load() {
+    let disputes;
+    try {
+      disputes = await apiFetch("/orders/" + orderId + "/disputes");
+    } catch (e) {
+      return;
+    }
+    const openDispute = disputes.find((d) => d.status === "open");
+    if (openDispute) {
+      renderOpen(openDispute);
+      return;
+    }
+    const latest = disputes[0];
+    body.replaceChildren();
+    if (latest) {
+      renderResolved(latest);
+    } else {
+      appendForm();
+    }
+  }
+
+  load();
+  return { el: wrap, reload: load };
+}

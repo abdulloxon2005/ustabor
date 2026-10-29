@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
@@ -8,13 +10,14 @@ from app.core.config import MAX_DB_INT
 from app.db.session import get_db
 from app.models import (
     Category,
+    Dispute,
     MasterProfile,
     Order,
     Payment,
     Review,
     User,
 )
-from app.models.enums import OrderStatus, Role
+from app.models.enums import DisputeStatus, OrderStatus, Role
 from app.schemas.admin import (
     AdminAssignIn,
     AdminOrderDetailOut,
@@ -26,6 +29,7 @@ from app.schemas.admin import (
     CommissionsReportOut,
     UserStatusIn,
 )
+from app.schemas.dispute import AdminDisputeListItem, AdminDisputeResolve, DisputeOut
 from app.schemas.category import CategoryCreate, CategoryOut, CategoryUpdate, slugify
 from app.schemas.master import ApprovalIn, ApprovalOut
 from app.schemas.order import HistoryOut, OfferOut
@@ -483,3 +487,64 @@ def get_commissions_report(
         commission_total=report.commission_total,
         orders=items,
     )
+
+
+# ==================== Shikoyatlar ====================
+
+
+@router.get("/disputes", response_model=list[AdminDisputeListItem])
+def list_disputes(
+    status_filter: DisputeStatus | None = Query(default=None, alias="status"),
+    limit: int = 20,
+    offset: int = Query(default=0, le=MAX_DB_INT),
+    db: Session = Depends(get_db),
+):
+    limit, offset = _clamp_pagination(limit, offset)
+
+    stmt = (
+        select(Dispute, User.full_name, User.role, Order.status, Category.name)
+        .join(User, Dispute.raised_by == User.id)
+        .join(Order, Dispute.order_id == Order.id)
+        .join(Category, Order.category_id == Category.id)
+        .order_by(Dispute.created_at.desc(), Dispute.id.desc())
+    )
+    if status_filter is not None:
+        stmt = stmt.where(Dispute.status == status_filter)
+
+    rows = db.execute(stmt.offset(offset).limit(limit)).all()
+    return [
+        AdminDisputeListItem(
+            id=d.id,
+            order_id=d.order_id,
+            status=d.status,
+            reason=d.reason,
+            admin_note=d.admin_note,
+            raised_by_name=full_name,
+            raised_by_role=role.value if hasattr(role, "value") else str(role),
+            category_name=cat_name,
+            order_status=order_status.value if hasattr(order_status, "value") else str(order_status),
+            created_at=d.created_at,
+            resolved_at=d.resolved_at,
+        )
+        for d, full_name, role, order_status, cat_name in rows
+    ]
+
+
+@router.patch("/disputes/{dispute_id}", response_model=DisputeOut)
+def resolve_dispute(
+    data: AdminDisputeResolve,
+    dispute_id: int = Path(..., le=MAX_DB_INT),
+    db: Session = Depends(get_db),
+):
+    dispute = db.get(Dispute, dispute_id)
+    if dispute is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Shikoyat topilmadi")
+    if dispute.status != DisputeStatus.OPEN:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Bu shikoyat allaqachon hal qilingan")
+
+    dispute.status = DisputeStatus(data.status)
+    dispute.admin_note = data.admin_note
+    dispute.resolved_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(dispute)
+    return dispute

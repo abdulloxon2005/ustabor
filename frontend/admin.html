@@ -21,6 +21,7 @@
       <button id="tabOrdersBtn" class="tab-btn active" type="button" role="tab">Buyurtmalar</button>
       <button id="tabUsersBtn" class="tab-btn" type="button" role="tab">Foydalanuvchilar</button>
       <button id="tabCommissionsBtn" class="tab-btn" type="button" role="tab">Komissiya</button>
+      <button id="tabDisputesBtn" class="tab-btn" type="button" role="tab">Shikoyatlar</button>
     </div>
 
     <!-- ================= TAB 1: BUYURTMALAR ================= -->
@@ -182,6 +183,25 @@
       </div>
     </section>
 
+    <!-- ================= TAB 4: SHIKOYATLAR ================= -->
+    <section id="tabDisputes" style="display: none;">
+      <div class="card" style="padding: 12px;">
+        <label for="disputeStatusFilter" style="margin-top: 0;">Holat bo'yicha saralash:</label>
+        <select id="disputeStatusFilter">
+          <option value="">Barchasi</option>
+          <option value="open">Ko'rib chiqilmoqda</option>
+          <option value="resolved">Hal qilindi</option>
+          <option value="rejected">Rad etildi</option>
+        </select>
+      </div>
+
+      <p id="disputeState" class="muted" aria-live="polite"></p>
+      <div id="disputeRetryBox" style="display: none; margin-bottom: 12px;">
+        <button id="disputeRetryBtn" class="btn btn-outline" type="button">Qayta urinish</button>
+      </div>
+      <div id="disputeList"></div>
+    </section>
+
     <!-- ================= BIRIKTIRISH MODALI ================= -->
     <div id="assignModal" class="modal-overlay" style="display: none;">
       <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
@@ -213,28 +233,34 @@
       const tabOrdersBtn = document.getElementById("tabOrdersBtn");
       const tabUsersBtn = document.getElementById("tabUsersBtn");
       const tabCommissionsBtn = document.getElementById("tabCommissionsBtn");
+      const tabDisputesBtn = document.getElementById("tabDisputesBtn");
 
       const tabOrders = document.getElementById("tabOrders");
       const tabUsers = document.getElementById("tabUsers");
       const tabCommissions = document.getElementById("tabCommissions");
+      const tabDisputes = document.getElementById("tabDisputes");
 
       function switchTab(tab) {
         tabOrdersBtn.classList.toggle("active", tab === "orders");
         tabUsersBtn.classList.toggle("active", tab === "users");
         tabCommissionsBtn.classList.toggle("active", tab === "commissions");
+        tabDisputesBtn.classList.toggle("active", tab === "disputes");
 
         tabOrders.style.display = tab === "orders" ? "block" : "none";
         tabUsers.style.display = tab === "users" ? "block" : "none";
         tabCommissions.style.display = tab === "commissions" ? "block" : "none";
+        tabDisputes.style.display = tab === "disputes" ? "block" : "none";
 
         if (tab === "orders") loadOrders();
         if (tab === "users") loadUsers();
         if (tab === "commissions") loadCommissions();
+        if (tab === "disputes") loadDisputes();
       }
 
       tabOrdersBtn.addEventListener("click", () => switchTab("orders"));
       tabUsersBtn.addEventListener("click", () => switchTab("users"));
       tabCommissionsBtn.addEventListener("click", () => switchTab("commissions"));
+      tabDisputesBtn.addEventListener("click", () => switchTab("disputes"));
 
       // ================= TAB 1: BUYURTMALAR =================
       let ordersOffset = 0;
@@ -836,6 +862,151 @@
           commState.textContent = "Xatolik: " + err.message;
           commState.className = "err";
           commRetryBox.style.display = "block";
+        }
+      }
+
+      // ================= TAB 4: SHIKOYATLAR =================
+      const disputeStatusFilter = document.getElementById("disputeStatusFilter");
+      const disputeState = document.getElementById("disputeState");
+      const disputeRetryBox = document.getElementById("disputeRetryBox");
+      const disputeRetryBtn = document.getElementById("disputeRetryBtn");
+      const disputeList = document.getElementById("disputeList");
+
+      disputeStatusFilter.addEventListener("change", () => loadDisputes());
+      disputeRetryBtn.addEventListener("click", () => loadDisputes());
+
+      const DISPUTE_STATUS_LABELS = {
+        open: "Ko'rib chiqilmoqda",
+        resolved: "Hal qilindi",
+        rejected: "Rad etildi",
+      };
+
+      function renderDispute(d) {
+        const card = document.createElement("div");
+        card.className = "card";
+
+        const head = document.createElement("div");
+        head.className = "card-row";
+        const title = document.createElement("strong");
+        title.textContent = "Buyurtma #" + d.order_id + " — " + d.category_name;
+        const badge = document.createElement("span");
+        badge.className = "badge";
+        if (d.status === "open") {
+          badge.style.background = "#fef3c7";
+          badge.style.color = "#92400e";
+        } else if (d.status === "resolved") {
+          badge.style.background = "#dcfce7";
+          badge.style.color = "#166534";
+        } else {
+          badge.style.background = "#fee2e2";
+          badge.style.color = "#991b1b";
+        }
+        badge.textContent = DISPUTE_STATUS_LABELS[d.status] || d.status;
+        head.append(title, badge);
+        card.appendChild(head);
+
+        const meta = document.createElement("p");
+        meta.className = "muted";
+        meta.style.margin = "4px 0";
+        meta.textContent = d.raised_by_name + " (" + formatRole(d.raised_by_role) + ") · " + formatDate(d.created_at);
+        card.appendChild(meta);
+
+        const reason = document.createElement("p");
+        reason.style.margin = "4px 0";
+        reason.textContent = d.reason;
+        card.appendChild(reason);
+
+        if (d.admin_note) {
+          const note = document.createElement("p");
+          note.className = "muted";
+          note.style.margin = "4px 0";
+          note.style.fontSize = "0.85rem";
+          note.textContent = "Admin izohi: " + d.admin_note;
+          card.appendChild(note);
+        }
+
+        if (d.status === "open") {
+          const noteInput = document.createElement("textarea");
+          noteInput.placeholder = "Izoh (ixtiyoriy)";
+          noteInput.maxLength = 1000;
+          noteInput.style.marginTop = "8px";
+          card.appendChild(noteInput);
+
+          const btnRow = document.createElement("div");
+          btnRow.style.display = "flex";
+          btnRow.style.gap = "8px";
+          btnRow.style.marginTop = "8px";
+
+          const resolveBtn = document.createElement("button");
+          resolveBtn.type = "button";
+          resolveBtn.className = "btn btn-accent";
+          resolveBtn.style.flex = "1";
+          resolveBtn.textContent = "Hal qilish";
+
+          const rejectBtn = document.createElement("button");
+          rejectBtn.type = "button";
+          rejectBtn.className = "btn btn-outline";
+          rejectBtn.style.flex = "1";
+          rejectBtn.textContent = "Rad etish";
+
+          async function resolveWith(newStatus) {
+            const verb = newStatus === "resolved" ? "hal qilingan" : "rad etilgan";
+            if (!(await confirmModal("Shikoyatni " + verb + " deb belgilaysizmi?"))) return;
+            resolveBtn.disabled = true;
+            rejectBtn.disabled = true;
+            try {
+              await apiFetch("/admin/disputes/" + d.id, {
+                method: "PATCH",
+                body: JSON.stringify({ status: newStatus, admin_note: noteInput.value.trim() || null }),
+              });
+              toast("Shikoyat holati yangilandi", "success");
+              loadDisputes();
+            } catch (err) {
+              toast(err.message, "error");
+              resolveBtn.disabled = false;
+              rejectBtn.disabled = false;
+            }
+          }
+
+          resolveBtn.addEventListener("click", () => resolveWith("resolved"));
+          rejectBtn.addEventListener("click", () => resolveWith("rejected"));
+
+          btnRow.append(resolveBtn, rejectBtn);
+          card.appendChild(btnRow);
+        }
+
+        return card;
+      }
+
+      async function loadDisputes() {
+        disputeList.replaceChildren();
+        disputeRetryBox.style.display = "none";
+        disputeRetryBtn.disabled = true;
+        disputeState.textContent = "Yuklanmoqda...";
+        disputeState.className = "muted";
+        try {
+          const q = disputeStatusFilter.value ? "?status=" + encodeURIComponent(disputeStatusFilter.value) : "";
+          const disputes = await apiFetch("/admin/disputes" + q);
+          disputeRetryBtn.disabled = false;
+          if (!disputes.length) {
+            disputeState.textContent = "";
+            const empty = document.createElement("div");
+            empty.className = "card empty-state";
+            empty.textContent = "Shikoyat yo'q";
+            disputeList.appendChild(empty);
+            return;
+          }
+          disputeState.textContent = disputes.length + " ta shikoyat";
+          disputes.forEach((d) => disputeList.appendChild(renderDispute(d)));
+        } catch (err) {
+          disputeRetryBtn.disabled = false;
+          if (err.status === 403) {
+            renderForbidden(err.message);
+            return;
+          }
+          disputeState.textContent = "Xatolik: " + err.message;
+          disputeState.className = "err";
+          disputeRetryBox.style.display = "block";
         }
       }
 
