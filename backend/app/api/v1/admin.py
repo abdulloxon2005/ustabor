@@ -20,6 +20,7 @@ from app.models import (
 )
 from app.models.enums import DisputeStatus, OrderStatus, Role
 from app.schemas.admin import (
+    AdminAnalyticsOut,
     AdminAssignIn,
     AdminAuditLogItem,
     AdminOrderDetailOut,
@@ -607,3 +608,14 @@ def list_audit_log(
         )
         for entry, admin_name in rows
     ]
+
+
+# ==================== Statistika ====================
+
+
+@router.get("/analytics", response_model=AdminAnalyticsOut)
+def get_analytics(
+    days: int = Query(default=30, ge=1, le=365),
+    db: Session = Depends(get_db),
+):
+    return admin_ops.analytics(db=db, days=days)

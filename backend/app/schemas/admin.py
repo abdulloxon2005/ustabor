@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt
 
@@ -139,3 +139,34 @@ class CommissionsReportOut(BaseModel):
     gross_total: int
     commission_total: int
     orders: list[CommissionOrderItem]
+
+
+class DailyStatItem(BaseModel):
+    date: date
+    orders_count: int
+    completed_count: int
+    commission_total: int
+
+
+class CategoryStatItem(BaseModel):
+    category_name: str
+    orders_count: int
+
+
+class NewUsersItem(BaseModel):
+    date: date
+    customers: int
+    masters: int
+
+
+class AdminAnalyticsOut(BaseModel):
+    period_days: int
+    date_from: date
+    date_to: date
+    total_orders: int
+    total_completed_orders: int
+    total_commission: int
+    total_new_users: int
+    daily: list[DailyStatItem]
+    top_categories: list[CategoryStatItem]
+    new_users: list[NewUsersItem]

@@ -4,7 +4,7 @@ Barcha funksiyalar COMMIT QILMAYDI — commit chaqiruvchida.
 Buyurtma holati faqat order_flow.assign_master() orqali o'zgaradi.
 """
 
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta, timezone
 from typing import Any
 
 from fastapi import HTTPException, status
@@ -394,3 +394,113 @@ def commissions_report(
         commission=commission_total,
         orders=orders_list,
     )
+
+
+def analytics(db: Session, days: int = 30) -> dict[str, Any]:
+    """So'nggi N kunlik statistika: kunlik buyurtma/komissiya, top kategoriyalar,
+    yangi foydalanuvchilar. COMMIT QILMAYDI (faqat o'qish).
+    """
+    days = max(1, min(days, 365))
+    today = datetime.now(timezone.utc).date()
+    date_from = today - timedelta(days=days - 1)
+    dt_from = datetime.combine(date_from, time.min)
+    dt_to = datetime.combine(today, time.max)
+
+    created_rows = db.execute(
+        select(func.date(Order.created_at), func.count(Order.id))
+        .where(Order.created_at >= dt_from, Order.created_at <= dt_to)
+        .group_by(func.date(Order.created_at))
+    ).all()
+    created_map = {d: cnt for d, cnt in created_rows}
+
+    history_subq = (
+        select(
+            OrderStatusHistory.order_id,
+            func.max(OrderStatusHistory.created_at).label("completed_at"),
+        )
+        .where(OrderStatusHistory.to_status == OrderStatus.COMPLETED)
+        .group_by(OrderStatusHistory.order_id)
+        .subquery()
+    )
+    completed_rows = db.execute(
+        select(
+            Order.agreed_price,
+            Order.commission_rate,
+            Order.commission_amount,
+            history_subq.c.completed_at,
+        )
+        .join(history_subq, Order.id == history_subq.c.order_id)
+        .where(Order.status == OrderStatus.COMPLETED)
+        .where(history_subq.c.completed_at >= dt_from, history_subq.c.completed_at <= dt_to)
+    ).all()
+
+    completed_map: dict[str, int] = {}
+    commission_map: dict[str, int] = {}
+    total_commission = 0
+    for agreed_price, crate, comm_amt, completed_at in completed_rows:
+        key = completed_at.date().isoformat() if hasattr(completed_at, "date") else str(completed_at)[:10]
+        agreed = agreed_price or 0
+        rate = crate if crate is not None else 10
+        amt = comm_amt if comm_amt is not None else (agreed * rate) // 100
+        completed_map[key] = completed_map.get(key, 0) + 1
+        commission_map[key] = commission_map.get(key, 0) + amt
+        total_commission += amt
+
+    daily: list[dict[str, Any]] = []
+    for i in range(days):
+        d = date_from + timedelta(days=i)
+        key = d.isoformat()
+        daily.append(
+            {
+                "date": d,
+                "orders_count": created_map.get(key, 0),
+                "completed_count": completed_map.get(key, 0),
+                "commission_total": commission_map.get(key, 0),
+            }
+        )
+
+    cat_rows = db.execute(
+        select(Category.name, func.count(Order.id))
+        .join(Order, Order.category_id == Category.id)
+        .where(Order.created_at >= dt_from, Order.created_at <= dt_to)
+        .group_by(Category.name)
+        .order_by(func.count(Order.id).desc())
+        .limit(10)
+    ).all()
+    top_categories = [{"category_name": name, "orders_count": cnt} for name, cnt in cat_rows]
+
+    user_rows = db.execute(
+        select(func.date(User.created_at), User.role, func.count(User.id))
+        .where(User.created_at >= dt_from, User.created_at <= dt_to)
+        .group_by(func.date(User.created_at), User.role)
+    ).all()
+    new_users_map: dict[str, dict[str, int]] = {}
+    for key, role, cnt in user_rows:
+        entry = new_users_map.setdefault(key, {"customers": 0, "masters": 0})
+        role_val = role.value if hasattr(role, "value") else role
+        if role_val == Role.CUSTOMER.value:
+            entry["customers"] += cnt
+        elif role_val == Role.MASTER.value:
+            entry["masters"] += cnt
+
+    new_users: list[dict[str, Any]] = []
+    total_new_users = 0
+    for i in range(days):
+        d = date_from + timedelta(days=i)
+        key = d.isoformat()
+        entry = new_users_map.get(key, {"customers": 0, "masters": 0})
+        total_new_users += entry["customers"] + entry["masters"]
+        new_users.append({"date": d, "customers": entry["customers"], "masters": entry["masters"]})
+
+    return {
+        "period_days": days,
+        "date_from": date_from,
+        "date_to": today,
+        "total_orders": sum(created_map.values()),
+        "total_completed_orders": sum(completed_map.values()),
+        "total_commission": total_commission,
+        "total_new_users": total_new_users,
+        "daily": daily,
+        "top_categories": top_categories,
+        "new_users": new_users,
+    }
