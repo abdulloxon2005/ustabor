@@ -128,6 +128,47 @@ function startPolling(fn, ms) {
   };
 }
 
+// ================= Bildirishnoma tovushi =================
+// Brauzerlar foydalanuvchi sahifa bilan hali o'zaro ta'sirlashmagan bo'lsa
+// ovoz chiqarishni bloklaydi — shuning uchun AudioContext birinchi bosish/teginishda
+// "qulfdan chiqariladi", keyin istalgan vaqt notificationBeep() chaqirilsa ishlaydi.
+let _audioCtx = null;
+function _unlockAudio() {
+  if (_audioCtx) return;
+  try {
+    _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  } catch (e) {}
+}
+document.addEventListener("click", _unlockAudio, { once: true });
+document.addEventListener("touchstart", _unlockAudio, { once: true });
+
+// Yangi buyurtma/taklif haqida ikki ohangli qisqa signal (tashqi fayl kerak emas).
+function notificationBeep() {
+  try {
+    if (!_audioCtx) {
+      _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (_audioCtx.state === "suspended") _audioCtx.resume();
+    const now = _audioCtx.currentTime;
+    [880, 1175].forEach((freq, i) => {
+      const osc = _audioCtx.createOscillator();
+      const gain = _audioCtx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      const start = now + i * 0.16;
+      gain.gain.setValueAtTime(0, start);
+      gain.gain.linearRampToValueAtTime(0.2, start + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.22);
+      osc.connect(gain);
+      gain.connect(_audioCtx.destination);
+      osc.start(start);
+      osc.stop(start + 0.24);
+    });
+  } catch (e) {
+    // Ovoz ixtiyoriy: brauzer taqiqlasa ham oqim davom etadi
+  }
+}
+
 // Buyurtma chatini (GET/POST /orders/{id}/messages) ko'rsatuvchi widget.
 // Qaytaradi: { el, reload } — el DOM'ga qo'shiladi, reload() fon yangilanishida chaqiriladi.
 function createChatWidget(orderId, currentUserId) {
@@ -570,13 +611,24 @@ function createMapPicker({ initialLat, initialLon, onChange, autoLocate } = {}) 
   }
   locateBtn.addEventListener("click", doLocate);
 
+  let searchRequestId = 0;
+
   async function doSearch() {
     const q = searchInput.value.trim();
     if (q.length < 3) return;
+    const myRequestId = ++searchRequestId;
+
     resultsList.replaceChildren();
+    const loadingP = document.createElement("p");
+    loadingP.className = "muted";
+    loadingP.style.margin = "0";
+    loadingP.textContent = "Qidirilmoqda...";
+    resultsList.appendChild(loadingP);
     searchBtn.disabled = true;
     try {
       const items = await apiFetch("/geo/search?q=" + encodeURIComponent(q));
+      if (myRequestId !== searchRequestId) return; // eskirgan natija — e'tiborsiz qoldiriladi
+      resultsList.replaceChildren();
       if (!items.length) {
         const p = document.createElement("p");
         p.className = "muted";
@@ -595,13 +647,16 @@ function createMapPicker({ initialLat, initialLon, onChange, autoLocate } = {}) 
         btn.addEventListener("click", () => {
           placePin(item.latitude, item.longitude, true, "search");
           resultsList.replaceChildren();
+          searchInput.value = item.address;
         });
         resultsList.appendChild(btn);
       });
     } catch (e) {
+      if (myRequestId !== searchRequestId) return;
+      resultsList.replaceChildren();
       stateEl.textContent = "Qidirishda xatolik: " + e.message;
     } finally {
-      searchBtn.disabled = false;
+      if (myRequestId === searchRequestId) searchBtn.disabled = false;
     }
   }
 
@@ -611,6 +666,18 @@ function createMapPicker({ initialLat, initialLon, onChange, autoLocate } = {}) 
       e.preventDefault();
       doSearch();
     }
+  });
+
+  // Yandexdagi kabi: yozayotganda natijalar o'zi (tugma bosmasdan) chiqadi.
+  let searchDebounceTimer = null;
+  searchInput.addEventListener("input", () => {
+    clearTimeout(searchDebounceTimer);
+    const q = searchInput.value.trim();
+    if (q.length < 3) {
+      resultsList.replaceChildren();
+      return;
+    }
+    searchDebounceTimer = setTimeout(doSearch, 400);
   });
 
   (async () => {

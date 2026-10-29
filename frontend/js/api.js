@@ -37,10 +37,20 @@ function formatPaymentStatus(status) {
   return PAYMENT_STATUS_LABELS[status] || status || "To'langan";
 }
 
+// Backend vaqtni UTC'da, lekin ko'pincha "Z"/ofset BELGISIZ qaytaradi
+// (masalan "2026-10-29T16:15:46"). Brauzer bunday satrni LOKAL vaqt deb
+// o'qiydi — bu xato. Agar oxirida aniq zona belgisi bo'lmasa, "Z" qo'shib
+// UTC ekanini aniq ko'rsatamiz.
+function parseServerDate(dtStr) {
+  if (!dtStr) return null;
+  const hasTz = /Z$|[+-]\d{2}:?\d{2}$/.test(dtStr);
+  return new Date(hasTz ? dtStr : dtStr + "Z");
+}
+
 function formatDate(dtStr) {
   if (!dtStr) return "—";
-  const d = new Date(dtStr);
-  if (isNaN(d.getTime())) return "—";
+  const d = parseServerDate(dtStr);
+  if (!d || isNaN(d.getTime())) return "—";
   const pad = (n) => String(n).padStart(2, "0");
   return (
     pad(d.getDate()) +

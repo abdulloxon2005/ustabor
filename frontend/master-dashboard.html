@@ -109,7 +109,7 @@
 
       function formatRemaining(expiresAt) {
         if (!expiresAt) return "";
-        const diffMs = new Date(expiresAt) - new Date();
+        const diffMs = parseServerDate(expiresAt) - new Date();
         if (diffMs <= 0) return "Muddati tugagan";
         const mins = Math.ceil(diffMs / 60000);
         return mins + " daqiqa qoldi";
@@ -415,6 +415,8 @@
         return card;
       }
 
+      let knownOfferIds = null; // null = hali solishtirilmagan (birinchi yuklash)
+
       async function load(silent) {
         if (!silent) {
           stateEl.textContent = "Yuklanmoqda...";
@@ -449,8 +451,14 @@
           stateEl.textContent = "";
           contentEl.style.display = "block";
 
-          offersListEl.replaceChildren();
           const offers = ordersData.pending_offers || ordersData.offers || [];
+          const currentOfferIds = new Set(offers.map((o) => o.id));
+          if (knownOfferIds !== null && offers.some((o) => !knownOfferIds.has(o.id))) {
+            notificationBeep();
+          }
+          knownOfferIds = currentOfferIds;
+
+          offersListEl.replaceChildren();
           if (!offers.length) {
             const empty = document.createElement("div");
             empty.className = "card empty-state";
