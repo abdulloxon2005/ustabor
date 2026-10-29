@@ -59,8 +59,18 @@
         const a = document.createElement("a");
         a.className = "btn btn-outline btn-block";
         a.style.marginTop = "8px";
-        a.textContent = "Buyurtmani ko'rish →";
-        a.href = "order-detail.html?id=" + encodeURIComponent(n.related_order_id);
+        // order-detail.html faqat mijoz uchun; usta/admin uchun tegishli
+        // umumiy sahifaga (u yerda buyurtmani ro'yxatdan topadi) yo'naltiramiz.
+        if (user.role === "customer") {
+          a.textContent = "Buyurtmani ko'rish →";
+          a.href = "order-detail.html?id=" + encodeURIComponent(n.related_order_id);
+        } else if (user.role === "master") {
+          a.textContent = "Usta panelida ko'rish →";
+          a.href = "master-dashboard.html";
+        } else {
+          a.textContent = "Admin panelida ko'rish →";
+          a.href = "admin.html";
+        }
         return a;
       }
 

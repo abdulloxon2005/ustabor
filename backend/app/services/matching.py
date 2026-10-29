@@ -166,7 +166,10 @@ def create_offer(db: Session, order: Order, master: MasterProfile) -> OrderOffer
         master.user_id,
         "new_offer",
         "Yangi taklif",
-        f"#{order.id} buyurtma uchun sizga taklif yuborildi",
+        (
+            f"{order.category.name} — {order.customer.full_name}, "
+            f"{order.city}, {order.district}"
+        ),
         order_id=order.id,
     )
     return offer

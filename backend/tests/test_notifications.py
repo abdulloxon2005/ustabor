@@ -90,7 +90,12 @@ def test_new_offer_notifies_master(client, db, auth_header, make_category):
     r_list = client.get(NOTIFICATIONS, headers=env["master_headers"])
     assert r_list.status_code == 200
     items = r_list.json()
-    assert any(n["type"] == "new_offer" for n in items)
+    new_offer = next(n for n in items if n["type"] == "new_offer")
+    # Usta bildirishnomada xizmat turi, mijoz ismi va shahar/tumanni ko'rishi kerak
+    assert env["cat"].name in new_offer["body"]
+    assert "Mijoz" in new_offer["body"]
+    assert "Toshkent" in new_offer["body"]
+    assert "Chilonzor" in new_offer["body"]
 
     assert sms.last_message_for(env["master_user"].phone) is not None
 
