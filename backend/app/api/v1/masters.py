@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.api.deps import require_role
 from app.core.config import MAX_DB_INT
 from app.db.session import get_db
-from app.models import Category, Favorite, MasterPhoto, MasterProfile, MasterService, Order, OrderOffer, Review, User
+from app.models import Category, Favorite, MasterAvailability, MasterPhoto, MasterProfile, MasterService, Order, OrderOffer, Review, User
 from app.models.enums import OfferStatus, OrderStatus, PricingType, QuoteStatus, Role
 from app.schemas.master import (
     AvailabilityIn,
@@ -21,6 +21,8 @@ from app.schemas.master import (
     MasterPublicOut,
     ProfileCreate,
     ProfileUpdate,
+    ScheduleDayIn,
+    ScheduleDayOut,
     ServiceIn,
     ServiceOut,
 )
@@ -37,7 +39,22 @@ NO_PROFILE = "Usta profili topilmadi. Avval profil yarating"
 _with_services = (
     selectinload(MasterProfile.services).selectinload(MasterService.category),
     selectinload(MasterProfile.photos),
+    selectinload(MasterProfile.availability),
 )
+
+_DEFAULT_START = "09:00"
+_DEFAULT_END = "18:00"
+
+
+def _schedule_out(profile: MasterProfile) -> list[ScheduleDayOut]:
+    """7 kunlik jadval: belgilanmagan kunlar uchun standart (ish kuni, 09:00-18:00)."""
+    by_weekday = {a.weekday: a for a in (profile.availability or [])}
+    return [
+        ScheduleDayOut.model_validate(by_weekday[d])
+        if d in by_weekday
+        else ScheduleDayOut(weekday=d, is_working=True, start_time=_DEFAULT_START, end_time=_DEFAULT_END)
+        for d in range(7)
+    ]
 
 
 def _services_out(profile: MasterProfile, only_active: bool) -> list[ServiceOut]:
@@ -69,6 +86,7 @@ def _public(profile: MasterProfile) -> MasterPublicOut:
             PhotoOut(id=p.id, url=storage.url_for(p.file_path), created_at=p.created_at)
             for p in (profile.photos or [])
         ],
+        schedule=_schedule_out(profile),
     )
 
 
@@ -189,6 +207,49 @@ def set_availability(
     profile.is_available = data.is_available
     db.commit()
     return _me(_own_profile(db, user))
+
+
+# ---------- Haftalik ish jadvali (faqat ko'rsatish uchun) ----------
+
+
+@router.get("/me/schedule", response_model=list[ScheduleDayOut])
+def get_my_schedule(
+    user: User = Depends(require_role(Role.MASTER)),
+    db: Session = Depends(get_db),
+):
+    profile = _own_profile(db, user)
+    return _schedule_out(profile)
+
+
+@router.put("/me/schedule", response_model=list[ScheduleDayOut])
+def set_my_schedule(
+    days: list[ScheduleDayIn] = Body(...),
+    user: User = Depends(require_role(Role.MASTER)),
+    db: Session = Depends(get_db),
+):
+    profile = _own_profile(db, user)
+
+    weekdays = [d.weekday for d in days]
+    if len(weekdays) != len(set(weekdays)):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "Bir kun ro'yxatda faqat bir marta bo'lishi mumkin",
+        )
+
+    # Avval eskilarini o'chirib flush qilamiz (unique cheklov buzilmasligi uchun)
+    profile.availability.clear()
+    db.flush()
+    for d in days:
+        profile.availability.append(
+            MasterAvailability(
+                weekday=d.weekday,
+                is_working=d.is_working,
+                start_time=d.start_time,
+                end_time=d.end_time,
+            )
+        )
+    db.commit()
+    return _schedule_out(_own_profile(db, user))
 
 
 # ---------- Portfolio rasmlari ----------

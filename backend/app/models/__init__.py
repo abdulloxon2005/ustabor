@@ -1,5 +1,6 @@
 # Hamma modellar shu yerda import qilinadi: Alembic va SQLAlchemy
 # Base.metadata ga ularning hammasi tushganini shu orqali biladi.
+from app.models.availability import MasterAvailability
 from app.models.category import Category
 from app.models.favorite import Favorite
 from app.models.master import MasterProfile, MasterService
@@ -16,6 +17,7 @@ __all__ = [
     "Category",
     "Favorite",
     "LoginAttempt",
+    "MasterAvailability",
     "MasterPhoto",
     "MasterProfile",
     "MasterService",

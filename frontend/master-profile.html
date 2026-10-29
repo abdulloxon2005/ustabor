@@ -129,6 +129,20 @@
         <input id="photosInput" type="file" accept="image/jpeg,image/png" multiple />
         <div id="photosError" class="form-error" role="alert"></div>
       </div>
+
+      <!-- Haftalik ish jadvali -->
+      <form id="scheduleForm" class="card" novalidate>
+        <h2 style="margin-top: 0;">Haftalik ish jadvali</h2>
+        <p class="muted" style="margin: 0 0 12px;">
+          Faqat ko'rsatish uchun — mijozlar profilingizda qachon ishlashingizni ko'radi.
+        </p>
+        <div id="scheduleRows"></div>
+        <div id="scheduleError" class="form-error" role="alert"></div>
+        <div id="scheduleSuccess" class="form-success" aria-live="polite"></div>
+        <button id="saveScheduleBtn" class="btn btn-block" type="submit" style="margin-top: 8px;">
+          Jadvalni saqlash
+        </button>
+      </form>
     </section>
   </main>
 
@@ -186,9 +200,95 @@
       const photosError = document.getElementById("photosError");
       const MAX_MASTER_PHOTOS = 10;
 
+      const scheduleForm = document.getElementById("scheduleForm");
+      const scheduleRows = document.getElementById("scheduleRows");
+      const scheduleError = document.getElementById("scheduleError");
+      const scheduleSuccess = document.getElementById("scheduleSuccess");
+      const saveScheduleBtn = document.getElementById("saveScheduleBtn");
+      const WEEKDAY_NAMES = ["Dushanba", "Seshanba", "Chorshanba", "Payshanba", "Juma", "Shanba", "Yakshanba"];
+      let scheduleRowRefs = [];
+
       let categoriesData = [];
       let currentProfile = null;
       let serviceRowRefs = [];
+
+      function renderScheduleRows(schedule) {
+        scheduleRows.replaceChildren();
+        scheduleRowRefs = [];
+
+        const byWeekday = {};
+        (schedule || []).forEach((d) => { byWeekday[d.weekday] = d; });
+
+        for (let w = 0; w < 7; w++) {
+          const day = byWeekday[w] || { weekday: w, is_working: true, start_time: "09:00", end_time: "18:00" };
+
+          const row = document.createElement("div");
+          row.className = "service-row";
+
+          const checkLabel = document.createElement("label");
+          checkLabel.className = "service-check-label";
+          const checkbox = document.createElement("input");
+          checkbox.type = "checkbox";
+          checkbox.checked = Boolean(day.is_working);
+          const checkText = document.createElement("span");
+          checkText.textContent = WEEKDAY_NAMES[w];
+          checkLabel.append(checkbox, checkText);
+          row.appendChild(checkLabel);
+
+          const timesRow = document.createElement("div");
+          timesRow.className = "service-controls";
+
+          const startInput = document.createElement("input");
+          startInput.type = "time";
+          startInput.value = day.start_time || "09:00";
+
+          const endInput = document.createElement("input");
+          endInput.type = "time";
+          endInput.value = day.end_time || "18:00";
+
+          function syncDisabled() {
+            startInput.disabled = !checkbox.checked;
+            endInput.disabled = !checkbox.checked;
+          }
+          checkbox.addEventListener("change", syncDisabled);
+          syncDisabled();
+
+          timesRow.append(startInput, endInput);
+          row.appendChild(timesRow);
+          scheduleRows.appendChild(row);
+
+          scheduleRowRefs.push({ weekday: w, checkbox, startInput, endInput });
+        }
+      }
+
+      scheduleForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        scheduleError.textContent = "";
+        scheduleSuccess.textContent = "";
+
+        const payload = scheduleRowRefs.map((r) => ({
+          weekday: r.weekday,
+          is_working: r.checkbox.checked,
+          start_time: r.checkbox.checked ? r.startInput.value : null,
+          end_time: r.checkbox.checked ? r.endInput.value : null,
+        }));
+
+        saveScheduleBtn.disabled = true;
+        saveScheduleBtn.textContent = "Saqlanmoqda...";
+        try {
+          await apiFetch("/masters/me/schedule", {
+            method: "PUT",
+            body: JSON.stringify(payload),
+          });
+          scheduleSuccess.textContent = "Jadval saqlandi";
+          toast("Ish jadvali saqlandi", "success");
+        } catch (err) {
+          scheduleError.textContent = err.message;
+        } finally {
+          saveScheduleBtn.disabled = false;
+          saveScheduleBtn.textContent = "Jadvalni saqlash";
+        }
+      });
 
       function renderPhotosGrid(profile) {
         photosGrid.replaceChildren();
@@ -418,6 +518,7 @@
 
         renderServicesRows(categories, profile.services || []);
         renderPhotosGrid(profile);
+        renderScheduleRows(profile.schedule);
       }
 
       async function loadPage() {

@@ -47,6 +47,9 @@ class MasterProfile(IdTimestampMixin, Base):
     photos: Mapped[list["MasterPhoto"]] = relationship(
         back_populates="master", cascade="all, delete-orphan", order_by="MasterPhoto.id"
     )
+    availability: Mapped[list["MasterAvailability"]] = relationship(
+        back_populates="master", cascade="all, delete-orphan", order_by="MasterAvailability.weekday"
+    )
 
 
 class MasterService(IdTimestampMixin, Base):

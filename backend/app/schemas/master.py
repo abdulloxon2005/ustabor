@@ -108,6 +108,37 @@ class ApprovalIn(BaseModel):
     is_approved: StrictBool
 
 
+_TIME_RE = r"^([01]\d|2[0-3]):[0-5]\d$"
+
+
+class ScheduleDayIn(BaseModel):
+    weekday: StrictInt = Field(ge=0, le=6)
+    is_working: StrictBool
+    start_time: str | None = Field(default=None, pattern=_TIME_RE)
+    end_time: str | None = Field(default=None, pattern=_TIME_RE)
+
+    @model_validator(mode="after")
+    def _times_required_when_working(self):
+        if self.is_working:
+            if not self.start_time or not self.end_time:
+                raise ValueError("Ish kunlari uchun boshlanish va tugash vaqti kerak")
+            if self.start_time >= self.end_time:
+                raise ValueError("Boshlanish vaqti tugash vaqtidan oldin bo'lishi kerak")
+        else:
+            self.start_time = None
+            self.end_time = None
+        return self
+
+
+class ScheduleDayOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    weekday: int
+    is_working: bool
+    start_time: str | None = None
+    end_time: str | None = None
+
+
 class ServiceOut(BaseModel):
     category_id: int
     category_name: str
@@ -128,6 +159,7 @@ class MasterPublicOut(BaseModel):
     rating_count: int
     services: list[ServiceOut]
     photos: list[PhotoOut] = []
+    schedule: list[ScheduleDayOut] = []
 
 
 class MasterMeOut(MasterPublicOut):

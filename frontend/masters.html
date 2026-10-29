@@ -153,6 +153,25 @@
       place.textContent = m.city + ", " + m.district;
       card.append(head, place);
 
+      if (m.schedule && m.schedule.length) {
+        const todayWeekday = (new Date().getDay() + 6) % 7; // 0=Dushanba ... 6=Yakshanba
+        const today = m.schedule.find((d) => d.weekday === todayWeekday);
+        if (today) {
+          const todayBadge = document.createElement("p");
+          todayBadge.style.margin = "4px 0 0";
+          todayBadge.style.fontSize = "0.85rem";
+          todayBadge.style.fontWeight = "600";
+          if (today.is_working) {
+            todayBadge.style.color = "var(--ok)";
+            todayBadge.textContent = "Bugun ishlaydi (" + today.start_time + "–" + today.end_time + ")";
+          } else {
+            todayBadge.style.color = "var(--muted)";
+            todayBadge.textContent = "Bugun dam olish kuni";
+          }
+          card.appendChild(todayBadge);
+        }
+      }
+
       if (m.photos && m.photos.length) {
         const thumb = document.createElement("img");
         thumb.src = API_BASE.replace("/api/v1", "") + m.photos[0].url;

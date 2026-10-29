@@ -53,6 +53,8 @@ PERMISSION_TABLE: dict[tuple[str, str], str | set[str]] = {
     ("GET", "/api/v1/masters/me/earnings"): {"master"},
     ("POST", "/api/v1/masters/me/photos"): {"master"},
     ("DELETE", "/api/v1/masters/me/photos/{photo_id}"): {"master"},
+    ("GET", "/api/v1/masters/me/schedule"): {"master"},
+    ("PUT", "/api/v1/masters/me/schedule"): {"master"},
     ("GET", "/api/v1/masters/favorites"): {"customer"},
     ("POST", "/api/v1/masters/{master_id}/favorite"): {"customer"},
     ("DELETE", "/api/v1/masters/{master_id}/favorite"): {"customer"},
@@ -270,6 +272,9 @@ def _render_request(
         ("PATCH", "/api/v1/masters/me/availability"): {
             "is_available": True,
         },
+        ("PUT", "/api/v1/masters/me/schedule"): [
+            {"weekday": 0, "is_working": True, "start_time": "09:00", "end_time": "18:00"},
+        ],
         ("POST", "/api/v1/orders"): {
             "category_id": env["cat_id"],
             "description": "Kran suv oqizyapti, almashtirish kerak",
