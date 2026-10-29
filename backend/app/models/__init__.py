@@ -1,5 +1,6 @@
 # Hamma modellar shu yerda import qilinadi: Alembic va SQLAlchemy
 # Base.metadata ga ularning hammasi tushganini shu orqali biladi.
+from app.models.audit_log import AdminAuditLog
 from app.models.availability import MasterAvailability
 from app.models.category import Category
 from app.models.dispute import Dispute
@@ -15,6 +16,7 @@ from app.models.review import Review
 from app.models.user import User
 
 __all__ = [
+    "AdminAuditLog",
     "Category",
     "Dispute",
     "Favorite",

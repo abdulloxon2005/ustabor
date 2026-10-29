@@ -9,6 +9,7 @@ from app.api.deps import require_role
 from app.core.config import MAX_DB_INT
 from app.db.session import get_db
 from app.models import (
+    AdminAuditLog,
     Category,
     Dispute,
     MasterProfile,
@@ -20,6 +21,7 @@ from app.models import (
 from app.models.enums import DisputeStatus, OrderStatus, Role
 from app.schemas.admin import (
     AdminAssignIn,
+    AdminAuditLogItem,
     AdminOrderDetailOut,
     AdminOrderListItem,
     AdminPaymentOut,
@@ -151,7 +153,11 @@ def _admin_order_detail_out(order: Order, db: Session) -> AdminOrderDetailOut:
 
 
 @router.post("/categories", response_model=CategoryOut, status_code=status.HTTP_201_CREATED)
-def create_category(data: CategoryCreate, db: Session = Depends(get_db)):
+def create_category(
+    data: CategoryCreate,
+    admin: User = Depends(require_role(Role.ADMIN)),
+    db: Session = Depends(get_db),
+):
     slug = data.slug or slugify(data.name)
     if not slug:
         raise HTTPException(
@@ -164,10 +170,12 @@ def create_category(data: CategoryCreate, db: Session = Depends(get_db)):
     category = Category(name=data.name, slug=slug)
     db.add(category)
     try:
-        db.commit()
+        db.flush()
     except IntegrityError:
         db.rollback()
         raise HTTPException(status.HTTP_409_CONFLICT, SLUG_TAKEN)
+    admin_ops.log_admin_action(db, admin, "create_category", "category", category.id, data.name)
+    db.commit()
     db.refresh(category)
     return category
 
@@ -176,6 +184,7 @@ def create_category(data: CategoryCreate, db: Session = Depends(get_db)):
 def update_category(
     data: CategoryUpdate,
     category_id: int = Path(..., le=MAX_DB_INT),
+    admin: User = Depends(require_role(Role.ADMIN)),
     db: Session = Depends(get_db),
 ):
     category = db.get(Category, category_id)
@@ -185,6 +194,7 @@ def update_category(
         category.name = data.name
     if data.is_active is not None:
         category.is_active = data.is_active
+    admin_ops.log_admin_action(db, admin, "update_category", "category", category.id)
     db.commit()
     db.refresh(category)
     return category
@@ -197,12 +207,17 @@ def update_category(
 def set_master_approval(
     data: ApprovalIn,
     profile_id: int = Path(..., le=MAX_DB_INT),
+    admin: User = Depends(require_role(Role.ADMIN)),
     db: Session = Depends(get_db),
 ):
     profile = db.get(MasterProfile, profile_id)
     if profile is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Usta topilmadi")
     profile.is_approved = data.is_approved
+    admin_ops.log_admin_action(
+        db, admin, "approve_master" if data.is_approved else "revoke_master_approval",
+        "master_profile", profile_id,
+    )
     if data.is_approved:
         notify.notify_user(
             db,
@@ -344,6 +359,7 @@ def admin_cancel_order(
     if order is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Buyurtma topilmadi")
     transition(db, order, OrderStatus.CANCELLED, actor=admin)
+    admin_ops.log_admin_action(db, admin, "cancel_order", "order", order_id)
     db.commit()
     order = db.scalar(
         select(Order)
@@ -534,6 +550,7 @@ def list_disputes(
 def resolve_dispute(
     data: AdminDisputeResolve,
     dispute_id: int = Path(..., le=MAX_DB_INT),
+    admin: User = Depends(require_role(Role.ADMIN)),
     db: Session = Depends(get_db),
 ):
     dispute = db.get(Dispute, dispute_id)
@@ -545,6 +562,48 @@ def resolve_dispute(
     dispute.status = DisputeStatus(data.status)
     dispute.admin_note = data.admin_note
     dispute.resolved_at = datetime.now(timezone.utc)
+    admin_ops.log_admin_action(
+        db, admin, "resolve_dispute", "dispute", dispute_id, data.status
+    )
     db.commit()
     db.refresh(dispute)
     return dispute
+
+
+# ==================== Audit log ====================
+
+
+@router.get("/audit-log", response_model=list[AdminAuditLogItem])
+def list_audit_log(
+    admin_id: int | None = Query(default=None, le=MAX_DB_INT),
+    action: str | None = Query(default=None, max_length=60),
+    limit: int = 20,
+    offset: int = Query(default=0, le=MAX_DB_INT),
+    db: Session = Depends(get_db),
+):
+    limit, offset = _clamp_pagination(limit, offset)
+
+    stmt = (
+        select(AdminAuditLog, User.full_name)
+        .join(User, AdminAuditLog.admin_id == User.id)
+        .order_by(AdminAuditLog.created_at.desc(), AdminAuditLog.id.desc())
+    )
+    if admin_id is not None:
+        stmt = stmt.where(AdminAuditLog.admin_id == admin_id)
+    if action is not None:
+        stmt = stmt.where(AdminAuditLog.action == action)
+
+    rows = db.execute(stmt.offset(offset).limit(limit)).all()
+    return [
+        AdminAuditLogItem(
+            id=entry.id,
+            admin_id=entry.admin_id,
+            admin_name=admin_name,
+            action=entry.action,
+            target_type=entry.target_type,
+            target_id=entry.target_id,
+            detail=entry.detail,
+            created_at=entry.created_at,
+        )
+        for entry, admin_name in rows
+    ]

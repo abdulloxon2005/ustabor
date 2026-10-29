@@ -121,6 +121,17 @@ class CommissionOrderItem(BaseModel):
     payment_status: str | None = None
 
 
+class AdminAuditLogItem(BaseModel):
+    id: int
+    admin_id: int
+    admin_name: str
+    action: str
+    target_type: str
+    target_id: int | None = None
+    detail: str | None = None
+    created_at: datetime
+
+
 class CommissionsReportOut(BaseModel):
     total_completed_orders: int
     total_orders: int

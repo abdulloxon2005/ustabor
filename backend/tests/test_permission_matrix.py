@@ -92,6 +92,7 @@ PERMISSION_TABLE: dict[tuple[str, str], str | set[str]] = {
     ("GET", "/api/v1/admin/commissions"): {"admin"},
     ("GET", "/api/v1/admin/disputes"): {"admin"},
     ("PATCH", "/api/v1/admin/disputes/{dispute_id}"): {"admin"},
+    ("GET", "/api/v1/admin/audit-log"): {"admin"},
 }
 
 

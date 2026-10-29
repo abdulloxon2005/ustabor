@@ -12,6 +12,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.models import (
+    AdminAuditLog,
     Category,
     MasterProfile,
     MasterService,
@@ -23,6 +24,27 @@ from app.models import (
 )
 from app.models.enums import OfferStatus, OrderStatus, Role
 from app.services import order_flow, pricing
+
+
+def log_admin_action(
+    db: Session,
+    admin: User,
+    action: str,
+    target_type: str,
+    target_id: int | None = None,
+    detail: str | None = None,
+) -> AdminAuditLog:
+    """Admin amalini tarixga yozadi. COMMIT QILMAYDI."""
+    entry = AdminAuditLog(
+        admin_id=admin.id,
+        action=action,
+        target_type=target_type,
+        target_id=target_id,
+        detail=detail,
+    )
+    db.add(entry)
+    db.flush()
+    return entry
 
 
 class ReportOrderItem(dict):
@@ -175,6 +197,11 @@ def admin_assign_master(
     # Agar xizmat fixed bo'lsa narxni qo'llash
     pricing.apply_fixed_price(db, order)
 
+    log_admin_action(
+        db, admin, "assign_master", "order", order_id,
+        f"usta #{master_profile_id} biriktirildi",
+    )
+
     return order
 
 
@@ -203,6 +230,11 @@ def set_user_active(
 
     target_user.is_active = bool(is_active)
     db.flush()
+
+    log_admin_action(
+        db, admin, "block_user" if not is_active else "unblock_user", "user", target_user_id,
+    )
+
     return target_user
 
 
