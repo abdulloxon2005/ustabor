@@ -256,6 +256,9 @@ def test_filters(client, signup, admin_headers, make_category):
     assert ids(category_id=plumb.id, city="Toshkent") == [a]
     assert ids(city="Buxoro") == []
     assert ids(category_id=9999) == []
+    assert ids(q="aziz") == [a]
+    assert ids(q="AZ") == [a]
+    assert ids(q="nomavjud ism") == []
 
 
 def test_blocked_master_hidden(client, db, master, admin_headers):

@@ -270,6 +270,7 @@ function renderNav(activeKey) {
   } else if (user && user.role === "customer") {
     items = [
       { key: "home", href: "index.html", icon: "🏠", label: "Asosiy" },
+      { key: "masters", href: "masters.html", icon: "🧑‍🔧", label: "Ustalar" },
       { key: "orders", href: "my-orders.html", icon: "📋", label: "Buyurtmalar" },
       { key: "notifications", href: "notifications.html", icon: "🔔", label: "Bildirishnoma", badge: true },
       { key: "profile", href: "profile.html", icon: "👤", label: "Profil" },

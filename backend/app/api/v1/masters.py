@@ -520,6 +520,7 @@ def list_masters(
     category_id: int | None = Query(default=None, le=MAX_DB_INT),
     city: str | None = None,
     district: str | None = None,
+    q: str | None = Query(default=None, max_length=120),
     db: Session = Depends(get_db),
 ):
     stmt = (
@@ -548,6 +549,9 @@ def list_masters(
         stmt = stmt.where(func.lower(MasterProfile.city) == city.strip().lower())
     if district and district.strip():
         stmt = stmt.where(func.lower(MasterProfile.district) == district.strip().lower())
+    if q and q.strip():
+        term = f"%{q.strip().lower()}%"
+        stmt = stmt.where(func.lower(User.full_name).like(term))
     return [_public(p) for p in db.scalars(stmt).all()]
 
 

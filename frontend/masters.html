@@ -16,7 +16,17 @@
   <main class="container">
     <h1 id="title">Ustalar</h1>
 
-    <form id="filters" class="filters" novalidate>
+    <form id="filters" class="master-filters" novalidate>
+      <div>
+        <label for="q">Usta ismi</label>
+        <input id="q" name="q" type="text" placeholder="Ism bo'yicha qidirish" />
+      </div>
+      <div>
+        <label for="categorySelect">Xizmat turi</label>
+        <select id="categorySelect" name="category_id">
+          <option value="">Barcha xizmatlar</option>
+        </select>
+      </div>
       <div>
         <label for="city">Shahar</label>
         <input id="city" name="city" type="text" autocomplete="address-level2" placeholder="Toshkent" />
@@ -45,11 +55,11 @@
   <script src="js/api.js"></script>
   <script src="js/ui.js"></script>
   <script>
-    renderNav("home");
+    renderNav("masters");
 
     const params = new URLSearchParams(window.location.search);
     const rawCat = params.get("category_id");
-    const categoryId = rawCat && /^\d+$/.test(rawCat) ? rawCat : null;
+    let categoryId = rawCat && /^\d+$/.test(rawCat) ? rawCat : null;
     const rawOrderId = params.get("order_id");
     const orderId = rawOrderId && /^\d+$/.test(rawOrderId) ? rawOrderId : null;
     const rawLat = params.get("lat");
@@ -66,8 +76,10 @@
     const listEl = document.getElementById("list");
     const favOnlyLabel = document.getElementById("favOnlyLabel");
     const favOnly = document.getElementById("favOnly");
+    const categorySelect = document.getElementById("categorySelect");
     form.city.value = params.get("city") || "";
     form.district.value = params.get("district") || "";
+    form.q.value = params.get("q") || "";
 
     const isCustomer = Boolean(user && user.role === "customer");
     let favoriteIds = new Set();
@@ -119,6 +131,36 @@
       const card = document.createElement("div");
       card.className = "card master-card";
 
+      const photoWrap = document.createElement("div");
+      photoWrap.className = "master-card-photo-wrap";
+      if (m.photos && m.photos.length) {
+        const photo = document.createElement("img");
+        photo.className = "master-card-photo";
+        photo.src = API_BASE.replace("/api/v1", "") + m.photos[0].url;
+        photo.alt = m.full_name + " portfolio rasmi";
+        photoWrap.appendChild(photo);
+      } else {
+        const placeholder = document.createElement("div");
+        placeholder.className = "master-card-photo-placeholder";
+        placeholder.textContent = (m.full_name || "?").trim().charAt(0).toUpperCase();
+        photoWrap.appendChild(placeholder);
+      }
+
+      if (isCustomer) {
+        const favBtn = document.createElement("button");
+        favBtn.type = "button";
+        favBtn.className = "fav-btn-overlay";
+        const isFav = favoriteIds.has(m.id);
+        favBtn.textContent = isFav ? "♥" : "♡";
+        favBtn.setAttribute("aria-label", isFav ? "Sevimlilardan olib tashlash" : "Sevimlilarga qo'shish");
+        favBtn.addEventListener("click", () => toggleFavorite(m.id, favBtn));
+        photoWrap.appendChild(favBtn);
+      }
+      card.appendChild(photoWrap);
+
+      const body = document.createElement("div");
+      body.className = "master-card-body";
+
       const head = document.createElement("div");
       head.className = "card-row";
       const name = document.createElement("h3");
@@ -132,43 +174,23 @@
         rating.textContent = "Yangi usta (0 sharh)";
       }
       head.append(name, rating);
-
-      if (isCustomer) {
-        const favBtn = document.createElement("button");
-        favBtn.type = "button";
-        favBtn.style.border = "0";
-        favBtn.style.background = "transparent";
-        favBtn.style.fontSize = "1.4rem";
-        favBtn.style.lineHeight = "1";
-        favBtn.style.color = "var(--err)";
-        favBtn.style.cursor = "pointer";
-        favBtn.style.minHeight = "44px";
-        favBtn.style.minWidth = "44px";
-        const isFav = favoriteIds.has(m.id);
-        favBtn.textContent = isFav ? "♥" : "♡";
-        favBtn.setAttribute("aria-label", isFav ? "Sevimlilardan olib tashlash" : "Sevimlilarga qo'shish");
-        favBtn.addEventListener("click", () => toggleFavorite(m.id, favBtn));
-        head.appendChild(favBtn);
-      }
+      body.appendChild(head);
 
       const place = document.createElement("p");
-      place.className = "muted";
-      place.style.margin = "4px 0 0";
+      place.className = "muted master-card-location";
       place.textContent = m.city + ", " + m.district;
       if (orderLat != null && orderLon != null && m.latitude != null && m.longitude != null) {
         const distKm = haversineKm(orderLat, orderLon, m.latitude, m.longitude);
         place.textContent += " · ~" + (distKm < 10 ? distKm.toFixed(1) : Math.round(distKm)) + " km";
       }
-      card.append(head, place);
+      body.appendChild(place);
 
       if (m.schedule && m.schedule.length) {
         const todayWeekday = (new Date().getDay() + 6) % 7; // 0=Dushanba ... 6=Yakshanba
         const today = m.schedule.find((d) => d.weekday === todayWeekday);
         if (today) {
           const todayBadge = document.createElement("p");
-          todayBadge.style.margin = "4px 0 0";
-          todayBadge.style.fontSize = "0.85rem";
-          todayBadge.style.fontWeight = "600";
+          todayBadge.className = "master-card-today";
           if (today.is_working) {
             todayBadge.style.color = "var(--ok)";
             todayBadge.textContent = "Bugun ishlaydi (" + today.start_time + "–" + today.end_time + ")";
@@ -176,45 +198,35 @@
             todayBadge.style.color = "var(--muted)";
             todayBadge.textContent = "Bugun dam olish kuni";
           }
-          card.appendChild(todayBadge);
+          body.appendChild(todayBadge);
         }
-      }
-
-      if (m.photos && m.photos.length) {
-        const thumb = document.createElement("img");
-        thumb.src = API_BASE.replace("/api/v1", "") + m.photos[0].url;
-        thumb.alt = m.full_name + " portfolio rasmi";
-        thumb.style.width = "100%";
-        thumb.style.height = "140px";
-        thumb.style.objectFit = "cover";
-        thumb.style.borderRadius = "10px";
-        thumb.style.margin = "8px 0 0";
-        card.appendChild(thumb);
       }
 
       if (m.bio) {
         const bio = document.createElement("p");
         bio.style.margin = "8px 0 0";
         bio.textContent = m.bio;
-        card.appendChild(bio);
+        body.appendChild(bio);
       }
 
       const services = m.services.slice().sort((a, b) =>
         (String(b.category_id) === categoryId) - (String(a.category_id) === categoryId));
       if (services.length) {
-        const ul = document.createElement("ul");
+        const tagsWrap = document.createElement("div");
+        tagsWrap.className = "service-tags";
         services.forEach((s) => {
-          const li = document.createElement("li");
+          const tag = document.createElement("span");
+          tag.className = "service-tag";
           const n = document.createElement("span");
           n.textContent = s.category_name;
           const p = document.createElement("span");
           p.className = "price";
           p.textContent = s.pricing_type === "fixed" && s.base_price != null
             ? formatSom(s.base_price) : "Narx kelishiladi";
-          li.append(n, p);
-          ul.appendChild(li);
+          tag.append(n, document.createTextNode("·"), p);
+          tagsWrap.appendChild(tag);
         });
-        card.appendChild(ul);
+        body.appendChild(tagsWrap);
       }
 
       const reviewsSection = document.createElement("div");
@@ -342,33 +354,46 @@
       });
 
       reviewsSection.append(reviewsToggle, reviewsList);
-      card.appendChild(reviewsSection);
+      body.appendChild(reviewsSection);
 
-      if (orderId && user && user.role === "customer") {
-        const chooseBtn = document.createElement("button");
-        chooseBtn.type = "button";
-        chooseBtn.className = "btn btn-block btn-accent";
-        chooseBtn.style.marginTop = "12px";
-        chooseBtn.textContent = "Tanlash";
-        chooseBtn.addEventListener("click", async () => {
-          if (!(await confirmModal(m.full_name + " ustani ushbu buyurtma uchun tanlaysizmi?"))) return;
-          chooseBtn.disabled = true;
-          chooseBtn.textContent = "Tanlanmoqda...";
-          try {
-            await apiFetch("/orders/" + orderId + "/select-master", {
-              method: "POST",
-              body: JSON.stringify({ master_id: m.id }),
-            });
-            window.location.replace("my-orders.html");
-          } catch (err) {
-            toast(err.message, "error");
-            chooseBtn.disabled = false;
-            chooseBtn.textContent = "Tanlash";
-          }
-        });
-        card.appendChild(chooseBtn);
+      if (user && user.role === "customer") {
+        const actions = document.createElement("div");
+        actions.className = "master-card-actions";
+
+        if (orderId) {
+          const chooseBtn = document.createElement("button");
+          chooseBtn.type = "button";
+          chooseBtn.className = "btn btn-block btn-accent";
+          chooseBtn.textContent = "Tanlash";
+          chooseBtn.addEventListener("click", async () => {
+            if (!(await confirmModal(m.full_name + " ustani ushbu buyurtma uchun tanlaysizmi?"))) return;
+            chooseBtn.disabled = true;
+            chooseBtn.textContent = "Tanlanmoqda...";
+            try {
+              await apiFetch("/orders/" + orderId + "/select-master", {
+                method: "POST",
+                body: JSON.stringify({ master_id: m.id }),
+              });
+              window.location.replace("my-orders.html");
+            } catch (err) {
+              toast(err.message, "error");
+              chooseBtn.disabled = false;
+              chooseBtn.textContent = "Tanlash";
+            }
+          });
+          actions.appendChild(chooseBtn);
+        } else {
+          const orderBtn = document.createElement("a");
+          orderBtn.className = "btn btn-block btn-accent";
+          orderBtn.href = "create-order.html?master_id=" + encodeURIComponent(m.id);
+          orderBtn.textContent = "Buyurtma berish";
+          actions.appendChild(orderBtn);
+        }
+
+        body.appendChild(actions);
       }
 
+      card.appendChild(body);
       return card;
     }
 
@@ -386,13 +411,15 @@
         if (showFavOnly) {
           masters = await apiFetch("/masters/favorites");
         } else {
-          const q = new URLSearchParams();
-          if (categoryId) q.set("category_id", categoryId);
+          const qp = new URLSearchParams();
+          if (categoryId) qp.set("category_id", categoryId);
           const city = form.city.value.trim();
           const district = form.district.value.trim();
-          if (city) q.set("city", city);
-          if (district) q.set("district", district);
-          masters = await apiFetch("/masters" + (q.toString() ? "?" + q : ""));
+          const nameQuery = form.q.value.trim();
+          if (city) qp.set("city", city);
+          if (district) qp.set("district", district);
+          if (nameQuery) qp.set("q", nameQuery);
+          masters = await apiFetch("/masters" + (qp.toString() ? "?" + qp : ""));
         }
 
         if (!masters.length) {
@@ -413,12 +440,25 @@
       }
     }
 
-    if (categoryId) {
-      apiFetch("/categories").then((list) => {
+    apiFetch("/categories").then((list) => {
+      list.forEach((c) => {
+        const o = document.createElement("option");
+        o.value = c.id;
+        o.textContent = c.name;
+        categorySelect.appendChild(o);
+      });
+      if (categoryId) {
+        categorySelect.value = categoryId;
         const c = list.find((x) => String(x.id) === categoryId);
         if (c) document.getElementById("title").textContent = c.name;
-      }).catch(() => {});
-    }
+      }
+    }).catch(() => {});
+
+    categorySelect.addEventListener("change", () => {
+      categoryId = categorySelect.value || null;
+      document.getElementById("title").textContent = "Ustalar";
+      load();
+    });
 
     form.addEventListener("submit", (e) => { e.preventDefault(); load(); });
     load();
