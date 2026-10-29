@@ -237,9 +237,8 @@ def create_order(
 
     note = None
     if order.selection_mode == SelectionMode.AUTOMATIC:
-        matching.expire_stale_offers(db)
-        offer = matching.offer_next(db, order, user)
-        if offer is None:
+        offers = matching.broadcast_offers(db, order, user)
+        if not offers:
             note = "Mos usta topilmadi"
 
     db.commit()
@@ -477,8 +476,10 @@ def reject_offer(
         and order.selection_mode == SelectionMode.AUTOMATIC
         and order.status == OrderStatus.SEARCHING
     ):
-        next_offer = matching.offer_next(db, order, user)
-        next_offered = next_offer is not None
+        # Broadcast rejimida hamma mos usta allaqachon taklif olgan bo'ladi —
+        # bu faqat shu orada YANGI mos bo'lib qolgan (masalan endi tasdiqlangan) usta bo'lsa ishlaydi.
+        new_offers = matching.broadcast_offers(db, order, user)
+        next_offered = len(new_offers) > 0
 
     db.commit()
     return {

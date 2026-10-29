@@ -266,7 +266,7 @@ def test_e2e_nine_step_demo_and_automatic_followup(client, admin_headers):
     assert comm_data["orders"][0]["payment_amount"] == 200_000
     assert comm_data["orders"][0]["payment_status"] == "paid"
 
-    # Second order in AUTOMATIC mode: system offers it to the best eligible master (m1_pid)
+    # Second order in AUTOMATIC mode: system broadcasts it to all eligible masters
     r_auto = client.post(
         "/api/v1/orders",
         json={
@@ -281,9 +281,9 @@ def test_e2e_nine_step_demo_and_automatic_followup(client, admin_headers):
     )
     assert r_auto.status_code == 201
     auto_body = r_auto.json()
-    assert len(auto_body["offers"]) == 1
-    assert auto_body["offers"][0]["master_id"] == m1_pid
-    assert auto_body["offers"][0]["status"] == "pending"
+    assert len(auto_body["offers"]) >= 1
+    assert m1_pid in {o["master_id"] for o in auto_body["offers"]}
+    assert all(o["status"] == "pending" for o in auto_body["offers"])
 
 
 # ==================== 3b. Fixed-price flow ====================
@@ -354,9 +354,10 @@ def test_e2e_fixed_price_flow(client, admin_headers):
 # ==================== 3c. Automatic rotation ====================
 
 
-def test_e2e_automatic_rotation_and_all_reject_cancel(client, admin_headers):
-    """3c: Automatic rotation: master A rejects -> master B gets the offer -> B accepts;
-    A is never offered again; when everyone rejects the order stays searching and customer can cancel."""
+def test_e2e_automatic_broadcast_and_all_reject_cancel(client, admin_headers):
+    """3c: Automatic broadcast: both eligible masters get a pending offer immediately
+    when the order is created; A rejecting doesn't touch B's offer -> B accepts;
+    when everyone rejects the order stays searching and customer can cancel."""
     cat_id = _create_category_http(client, admin_headers)
 
     # Master A in Chilonzor (higher district bonus), Master B in Yunusobod
@@ -382,7 +383,7 @@ def test_e2e_automatic_rotation_and_all_reject_cancel(client, admin_headers):
     )
     c_headers, _ = _register_customer(client, "+998902003301")
 
-    # Scenario 1: A rejects -> B gets offer -> B accepts
+    # Scenario 1: both A and B get offered immediately -> A rejects -> B still pending -> B accepts
     r_ord1 = client.post(
         "/api/v1/orders",
         json={
@@ -397,13 +398,16 @@ def test_e2e_automatic_rotation_and_all_reject_cancel(client, admin_headers):
     )
     assert r_ord1.status_code == 201
     oid1 = r_ord1.json()["id"]
-    assert r_ord1.json()["offers"][0]["master_id"] == mA_pid
+    offers1 = r_ord1.json()["offers"]
+    assert len(offers1) == 2
+    assert {o["master_id"] for o in offers1} == {mA_pid, mB_pid}
+    assert all(o["status"] == "pending" for o in offers1)
 
     r_rejA = client.post(f"/api/v1/orders/{oid1}/reject", headers=mA_headers)
     assert r_rejA.status_code == 200
-    assert r_rejA.json()["next_master_offered"] is True
+    assert r_rejA.json()["next_master_offered"] is False
 
-    # Master B now has the pending offer; Master A has none
+    # Master B still has its pending offer (untouched by A's rejection); Master A has none
     mA_orders = client.get("/api/v1/masters/me/orders", headers=mA_headers).json()
     assert mA_orders["pending_offers"] == []
     mB_orders = client.get("/api/v1/masters/me/orders", headers=mB_headers).json()
@@ -432,10 +436,10 @@ def test_e2e_automatic_rotation_and_all_reject_cancel(client, admin_headers):
     )
     assert r_ord2.status_code == 201
     oid2 = r_ord2.json()["id"]
+    assert len(r_ord2.json()["offers"]) == 2
 
-    # Master A rejects -> Master B offered
-    assert client.post(f"/api/v1/orders/{oid2}/reject", headers=mA_headers).json()["next_master_offered"] is True
-    # Master B rejects -> no one left (Master A is never offered again)
+    # Both already have pending offers from the broadcast; rejecting finds no new master
+    assert client.post(f"/api/v1/orders/{oid2}/reject", headers=mA_headers).json()["next_master_offered"] is False
     r_rejB2 = client.post(f"/api/v1/orders/{oid2}/reject", headers=mB_headers)
     assert r_rejB2.status_code == 200
     assert r_rejB2.json()["next_master_offered"] is False

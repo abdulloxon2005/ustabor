@@ -1,4 +1,4 @@
-"""Matching algoritmini testlash (bayes_rating, score, rank, offer, expire, offer_next).
+"""Matching algoritmini testlash (bayes_rating, score, rank, offer, expire, broadcast_offers).
 
 Barcha testlar db fixture orqali ishlaydi (HTTP yo'q).
 """
@@ -332,12 +332,12 @@ class TestExpireStaleOffers:
         assert fresh_offer.status == OfferStatus.PENDING
 
 
-# ====== offer_next testlari ======
+# ====== broadcast_offers testlari ======
 
 
-class TestOfferNext:
-    def test_never_offers_same_master_twice(self, db):
-        """offer_next hech qachon bir ustaga ikkinchi marta taklif bermaydi."""
+class TestBroadcastOffers:
+    def test_offers_all_eligible_masters_at_once(self, db):
+        """broadcast_offers BIR VAQTDA barcha mos ustalarga taklif yaratadi."""
         cat = _category(db)
         customer = _user(db, "+998900000001", role=Role.CUSTOMER)
         order = _order(db, customer, cat)
@@ -353,55 +353,44 @@ class TestOfferNext:
 
         db.commit()
 
-        offered_ids = set()
-
-        offer1 = matching.offer_next(db, order, customer)
-        assert offer1 is not None
-        offered_ids.add(offer1.master_id)
+        offers = matching.broadcast_offers(db, order, customer)
         db.commit()
 
-        offer2 = matching.offer_next(db, order, customer)
-        assert offer2 is not None
-        offered_ids.add(offer2.master_id)
-        db.commit()
+        assert len(offers) == 2
+        assert {o.master_id for o in offers} == {mp1.id, mp2.id}
+        assert all(o.status == OfferStatus.PENDING for o in offers)
 
-        # Har ikkalasi turli ustalar
-        assert len(offered_ids) == 2
+        # Qayta chaqirilsa hech kimga ikkinchi marta taklif yaratilmaydi
+        offers2 = matching.broadcast_offers(db, order, customer)
+        assert offers2 == []
 
-        # Uchinchi taklif None (hech kim qolmagan)
-        offer3 = matching.offer_next(db, order, customer)
-        assert offer3 is None
-
-    def test_returns_none_when_no_masters(self, db):
-        """Mos usta yo'q bo'lganda None qaytaradi."""
+    def test_returns_empty_when_no_masters(self, db):
+        """Mos usta yo'q bo'lganda bo'sh ro'yxat qaytaradi."""
         cat = _category(db)
         customer = _user(db, "+998900000001", role=Role.CUSTOMER)
         order = _order(db, customer, cat)
         db.commit()
 
-        result = matching.offer_next(db, order, customer)
-        assert result is None
+        result = matching.broadcast_offers(db, order, customer)
+        assert result == []
 
-    def test_rotate_stale_automatic_orders_dispatches_next(self, db):
-        """Taklif muddati o'tganda rotate_stale_automatic_orders navbatdagi ustaga taklif beradi."""
+    def test_rotate_stale_automatic_orders_picks_up_newly_eligible_master(self, db):
+        """Taklif muddati o'tgandan keyin yangi mos bo'lib qolgan ustaga ham
+        taklif yuboriladi; eskilari qayta taklif qilinmaydi."""
         cat = _category(db)
         customer = _user(db, "+998900000001", role=Role.CUSTOMER)
         order = _order(db, customer, cat)
 
-        # 2 ta usta (Master A yuqori reyting, Master B pastroq)
         u1 = _user(db, "+998900000002")
         mp1 = _master(db, u1, rating_avg=4.9, rating_count=20)
         _service(db, mp1, cat)
 
-        u2 = _user(db, "+998900000003")
-        mp2 = _master(db, u2, rating_avg=4.0, rating_count=10)
-        _service(db, mp2, cat)
-
         db.commit()
 
-        # Dastlab Master A ga taklif
-        first_offer = matching.offer_next(db, order)
-        assert first_offer is not None
+        # Dastlab Master A ga taklif (yagona mos usta)
+        offers = matching.broadcast_offers(db, order)
+        assert len(offers) == 1
+        first_offer = offers[0]
         assert first_offer.master_id == mp1.id
         assert first_offer.status == OfferStatus.PENDING
         db.commit()
@@ -410,17 +399,23 @@ class TestOfferNext:
         first_offer.expires_at = datetime.now(timezone.utc) - timedelta(minutes=10)
         db.commit()
 
-        # rotate_stale_automatic_orders chaqirilganda:
-        # 1. Master A taklifi EXPIRED bo'ladi
-        # 2. Master B ga yangi PENDING taklif yuboriladi
+        # Hali boshqa mos usta yo'q: rotate hech narsa qo'shmaydi
+        assert matching.rotate_stale_automatic_orders(db, order) == 0
+        db.refresh(first_offer)
+        assert first_offer.status == OfferStatus.EXPIRED
+
+        # Endi Master B tasdiqlanib, mos bo'lib qoladi
+        u2 = _user(db, "+998900000003")
+        mp2 = _master(db, u2, rating_avg=4.0, rating_count=10)
+        _service(db, mp2, cat)
+        db.commit()
+
+        # rotate_stale_automatic_orders endi Master B ga taklif beradi
+        # (Master A ESKI, muddati o'tgan bo'lsa ham qayta taklif qilinmaydi)
         rotated_count = matching.rotate_stale_automatic_orders(db, order)
         db.commit()
 
         assert rotated_count == 1
-        db.refresh(first_offer)
-        assert first_offer.status == OfferStatus.EXPIRED
-
-        # Yangi taklif Master B ga biriktirilgan
         active_offer = db.scalar(
             select(models.OrderOffer).where(
                 models.OrderOffer.order_id == order.id,
@@ -429,16 +424,4 @@ class TestOfferNext:
         )
         assert active_offer is not None
         assert active_offer.master_id == mp2.id
-
-        # Endi Master B ning ham muddati o'tsin
-        active_offer.expires_at = datetime.now(timezone.utc) - timedelta(minutes=10)
-        db.commit()
-
-        # Qayta aylantirish: boshqa usta yo'q -> 0 qaytadi, yangi taklif bo'lmaydi
-        rotated_count2 = matching.rotate_stale_automatic_orders(db, order)
-        db.commit()
-
-        assert rotated_count2 == 0
-        db.refresh(active_offer)
-        assert active_offer.status == OfferStatus.EXPIRED
         assert order.status == OrderStatus.SEARCHING

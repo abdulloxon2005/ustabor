@@ -149,16 +149,6 @@ def rank_masters(
     )
 
 
-def best_master(
-    db: Session,
-    order: Order,
-    exclude_master_ids: set[int] | None = None,
-) -> MasterProfile | None:
-    """Eng yuqori skorli usta yoki None."""
-    ranked = rank_masters(db, order, exclude_master_ids)
-    return ranked[0] if ranked else None
-
-
 # ---------- Takliflar (offers) ----------
 
 def create_offer(db: Session, order: Order, master: MasterProfile) -> OrderOffer:
@@ -196,6 +186,11 @@ def expire_stale_offers(db: Session, order: Order | None = None) -> int:
             OrderOffer.expires_at < now,
         )
         .values(status=OfferStatus.EXPIRED)
+        # SQLite'da saqlangan va hali commit qilinmagan obyektlardagi
+        # timezone-aware/naive datetime aralashib ketishi mumkin (ORM "evaluate"
+        # strategiyasi Python'da solishtiradi). Buyruq to'g'ridan-to'g'ri SQL
+        # orqali bajariladi, keyin db.expire_all() keshni yangilaydi.
+        .execution_options(synchronize_session=False)
     )
     if order is not None:
         stmt = stmt.where(OrderOffer.order_id == order.id)
@@ -214,39 +209,38 @@ def _already_offered_ids(db: Session, order: Order) -> set[int]:
     )
 
 
-def offer_next(
+def broadcast_offers(
     db: Session,
     order: Order,
     actor: User | None = None,
-) -> OrderOffer | None:
-    """Automatic rejim: navbatdagi eng yaxshi ustaga taklif yuboradi.
+) -> list[OrderOffer]:
+    """Automatic rejim: barcha mos (hali taklif olmagan) ustalarga BIR VAQTDA
+    taklif yuboradi — "ochiq buyurtma": har bir usta o'z dashboardida ko'radi,
+    birinchi qabul qilgani g'olib bo'ladi (order_flow.assign_master atomik
+    UPDATE orqali boshqa hammaning takliflarini avtomatik rad etadi).
 
-    Avval muddati o'tganlarni tozalaydi, keyin allaqachon taklif
-    yuborilganlarni istisno qilib, eng yaxshi ustani topadi.
-    Hech kim qolmasa None qaytaradi. COMMIT QILMAYDI.
+    Avval muddati o'tganlarni tozalaydi, keyin allaqachon taklif yuborilgan
+    (har qanday holatdagi) ustalarni istisno qilib qolgan mos ustalarga yangi
+    taklif yaratadi (reyting bo'yicha tartiblangan holda). COMMIT QILMAYDI.
+    Qaytaradi: yangi yaratilgan takliflar ro'yxati.
     """
     expire_stale_offers(db, order)
     exclude = _already_offered_ids(db, order)
-    top = best_master(db, order, exclude)
-    if top is None:
-        return None
-    return create_offer(db, order, top)
+    masters = rank_masters(db, order, exclude)
+    return [create_offer(db, order, m) for m in masters]
 
 
 def rotate_stale_automatic_orders(db: Session, order: Order | None = None) -> int:
-    """Muddati o'tgan takliflarni tozalaydi va faol (PENDING) taklifi qolmagan
-    automatic qidiruvdagi buyurtmalarga navbatdagi ustani biriktiradi.
-    COMMIT QILMAYDI. Qaytaradi: yangi yaratilgan takliflar soni.
+    """Muddati o'tgan takliflarni tozalaydi va automatic qidiruvdagi
+    buyurtmalarga hali taklif olmagan yangi mos ustalar bo'lsa ularga ham
+    taklif yuboradi (masalan, usta endigina tasdiqlangan yoki bo'sh bo'lgan
+    bo'lsa). COMMIT QILMAYDI. Qaytaradi: yangi yaratilgan takliflar soni.
     """
     expire_stale_offers(db, order)
 
-    stmt = (
-        select(Order)
-        .where(
-            Order.status == OrderStatus.SEARCHING,
-            Order.selection_mode == SelectionMode.AUTOMATIC,
-        )
-        .options(selectinload(Order.offers))
+    stmt = select(Order).where(
+        Order.status == OrderStatus.SEARCHING,
+        Order.selection_mode == SelectionMode.AUTOMATIC,
     )
     if order is not None:
         stmt = stmt.where(Order.id == order.id)
@@ -254,11 +248,5 @@ def rotate_stale_automatic_orders(db: Session, order: Order | None = None) -> in
     auto_orders = db.scalars(stmt).all()
     count = 0
     for ord_obj in auto_orders:
-        has_pending = any(
-            o.status == OfferStatus.PENDING for o in (ord_obj.offers or [])
-        )
-        if not has_pending:
-            new_off = offer_next(db, ord_obj)
-            if new_off is not None:
-                count += 1
+        count += len(broadcast_offers(db, ord_obj))
     return count

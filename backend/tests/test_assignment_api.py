@@ -1,8 +1,9 @@
 """Assignment API testlari:
-- automatic order offer creation (va note holati)
+- automatic order: BARCHA mos ustalarga bir vaqtda broadcast taklif (va note holati),
+  birorta qabul qilishi bilan boshqalarga ko'rinmay qolishi
 - manual select-master (happy path, 404 stranger, 409 automatic, ineligible, duplicate pending)
 - master accept (happy path, stranger 404, customer/anon 403/401, unapproved 403, expired 409, race condition 409)
-- master reject (automatic rejimda navbatdagi ustaga, hech kim qolmasa searching, manual rejimda faqat offer o'zgaradi)
+- master reject (automatic/broadcast rejimda boshqa pending takliflarga tegmaydi, manual rejimda faqat offer o'zgaradi)
 - GET /masters/me/orders (pending offers manzil yashirilgan, active orders manzil ko'rsatilgan, begona usta narsalari yo'q)
 """
 
@@ -62,15 +63,20 @@ def _add_service(db, master_id, category_id, pricing_type=PricingType.FIXED, bas
 # ============================================================================
 
 
-def test_automatic_order_creates_offer_for_best_eligible_master(client, db, signup, santexnik_cat):
-    """Automatic order eligible ustalar ichidan eng yaxshisiga bitta pending offer yaratadi.
+def test_automatic_order_broadcasts_to_all_eligible_masters(client, db, signup, santexnik_cat):
+    """Automatic order BARCHA mos ustalarga bir vaqtda pending offer yaratadi
+    ("ochiq buyurtma" — birinchi qabul qilgan g'olib bo'ladi).
     Tasdiqlanmagan yoki mavjud bo'lmagan usta taklif qilinmaydi."""
-    # Usta 1: tasdiqlangan, mavjud, santexnik
+    # Usta 1 va 3: tasdiqlangan, mavjud, santexnik -> ikkalasi ham taklif olishi kerak
     h_m1, u_m1 = signup("master", "+998902000001", "Aziz Usta")
     m1 = _create_master_profile(db, u_m1["id"], is_approved=True, is_available=True, rating_avg=4.8, rating_count=20)
     _add_service(db, m1.id, santexnik_cat.id)
 
-    # Usta 2: tasdiqlanmagan
+    h_m3, u_m3 = signup("master", "+998902000004", "Bekzod Usta")
+    m3 = _create_master_profile(db, u_m3["id"], is_approved=True, is_available=True, rating_avg=4.0, rating_count=5)
+    _add_service(db, m3.id, santexnik_cat.id)
+
+    # Usta 2: tasdiqlanmagan -> taklif olmasligi kerak
     h_m2, u_m2 = signup("master", "+998902000002", "Vali Usta")
     m2 = _create_master_profile(db, u_m2["id"], is_approved=False, is_available=True)
     _add_service(db, m2.id, santexnik_cat.id)
@@ -93,9 +99,67 @@ def test_automatic_order_creates_offer_for_best_eligible_master(client, db, sign
     data = r.json()
     assert data["status"] == "searching"
     assert data["note"] is None
-    assert len(data["offers"]) == 1
-    assert data["offers"][0]["master_id"] == m1.id
-    assert data["offers"][0]["status"] == "pending"
+    assert len(data["offers"]) == 2
+    assert {o["master_id"] for o in data["offers"]} == {m1.id, m3.id}
+    assert all(o["status"] == "pending" for o in data["offers"])
+
+    # Ikkala usta ham o'z dashboardida ko'radi
+    for h in (h_m1, h_m3):
+        orders = client.get(f"{MASTERS_URL}/me/orders", headers=h).json()
+        assert any(p["order_id"] == data["id"] for p in orders["pending_offers"])
+    # Tasdiqlanmagan usta ko'rmaydi
+    m2_orders = client.get(f"{MASTERS_URL}/me/orders", headers=h_m2).json()
+    assert m2_orders["pending_offers"] == []
+
+
+def test_automatic_order_disappears_for_others_once_accepted(client, db, signup, santexnik_cat):
+    """Ochiq (broadcast) buyurtmani BIRORTA usta qabul qilishi bilan u boshqa
+    barcha mos ustalarning (hali qabul qilmaganlarning) ro'yxatidan yo'qoladi."""
+    h_m1, u_m1 = signup("master", "+998902000011", "Usta Tez")
+    mp1 = _create_master_profile(db, u_m1["id"], rating_avg=4.0, rating_count=5)
+    _add_service(db, mp1.id, santexnik_cat.id)
+
+    h_m2, u_m2 = signup("master", "+998902000012", "Usta Sekin")
+    mp2 = _create_master_profile(db, u_m2["id"], rating_avg=4.0, rating_count=5)
+    _add_service(db, mp2.id, santexnik_cat.id)
+
+    h_m3, u_m3 = signup("master", "+998902000013", "Usta Boshqa")
+    mp3 = _create_master_profile(db, u_m3["id"], rating_avg=4.0, rating_count=5)
+    _add_service(db, mp3.id, santexnik_cat.id)
+
+    h_c, u_c = signup("customer", "+998901000011", "Mijoz Tezkor")
+    r_order = client.post(
+        ORDERS_URL,
+        json={
+            "category_id": santexnik_cat.id,
+            "description": "Shoshilinch ish",
+            "city": "Toshkent",
+            "district": "Chilonzor",
+            "address": "Ko'cha 1",
+            "selection_mode": "automatic",
+        },
+        headers=h_c,
+    )
+    order_id = r_order.json()["id"]
+    assert len(r_order.json()["offers"]) == 3
+
+    # Barcha uchala usta dashboardida ko'radi
+    for h in (h_m1, h_m2, h_m3):
+        orders = client.get(f"{MASTERS_URL}/me/orders", headers=h).json()
+        assert any(p["order_id"] == order_id for p in orders["pending_offers"])
+
+    # Usta 1 birinchi bo'lib qabul qiladi
+    r_acc = client.post(f"{ORDERS_URL}/{order_id}/accept", headers=h_m1)
+    assert r_acc.status_code == 200
+
+    # Endi Usta 2 va Usta 3 ning ro'yxatida bu buyurtma umuman yo'q
+    for h in (h_m2, h_m3):
+        orders = client.get(f"{MASTERS_URL}/me/orders", headers=h).json()
+        assert all(p["order_id"] != order_id for p in orders["pending_offers"])
+
+    # Ular qabul qilishga urinsa 409/404 (taklif allaqachon rad etilgan)
+    r_late = client.post(f"{ORDERS_URL}/{order_id}/accept", headers=h_m2)
+    assert r_late.status_code == 409
 
 
 def test_automatic_order_no_eligible_master_returns_note(client, db, signup, santexnik_cat):
@@ -457,8 +521,9 @@ def test_race_condition_two_masters_accept(client, db, signup, santexnik_cat):
 # ============================================================================
 
 
-def test_reject_in_automatic_mode_offers_next_master(client, db, signup, santexnik_cat):
-    """Automatic rejimda rad etilganda darhol navbatdagi ustaga taklif yuboriladi."""
+def test_reject_in_automatic_mode_leaves_others_pending(client, db, signup, santexnik_cat):
+    """Automatic (broadcast) rejimda bitta usta rad etsa, boshqa ustaning
+    pending taklifiga ta'sir qilmaydi (hammaga allaqachon birdek taklif berilgan)."""
     h_m1, u_m1 = signup("master", "+998902000031", "Usta 1")
     mp1 = _create_master_profile(db, u_m1["id"], rating_avg=4.9, rating_count=30)
     _add_service(db, mp1.id, santexnik_cat.id)
@@ -482,22 +547,21 @@ def test_reject_in_automatic_mode_offers_next_master(client, db, signup, santexn
     )
     order_id = r_order.json()["id"]
 
-    # Dastlab eng yuqori usta (mp1) taklif olgan
+    # Ikkala usta ham darhol taklif olgan (broadcast)
     r1 = client.get(f"{ORDERS_URL}/{order_id}", headers=h_c)
     offers = r1.json()["offers"]
-    assert len(offers) == 1
-    assert offers[0]["master_id"] == mp1.id
+    assert len(offers) == 2
+    assert {o["master_id"] for o in offers} == {mp1.id, mp2.id}
+    assert all(o["status"] == "pending" for o in offers)
 
-    # Usta 1 rad etadi
+    # Usta 1 rad etadi -> boshqa mos usta yo'q (mp2 allaqachon taklif olgan), shuning uchun False
     r_rej = client.post(f"{ORDERS_URL}/{order_id}/reject", headers=h_m1)
     assert r_rej.status_code == 200
-    assert r_rej.json()["next_master_offered"] is True
+    assert r_rej.json()["next_master_offered"] is False
 
-    # Endi navbatdagi usta (mp2) taklif olgan, mp1 esa rad etilgan holatda
+    # mp1 rad etilgan, mp2 hamon pending (unga tegilmagan)
     r2 = client.get(f"{ORDERS_URL}/{order_id}", headers=h_c)
-    all_offers = r2.json()["offers"]
-    assert len(all_offers) == 2
-    statuses = {o["master_id"]: o["status"] for o in all_offers}
+    statuses = {o["master_id"]: o["status"] for o in r2.json()["offers"]}
     assert statuses[mp1.id] == "rejected"
     assert statuses[mp2.id] == "pending"
 
@@ -715,20 +779,16 @@ def test_acceptance_flow_automatic_and_manual(client, db, signup, santexnik_cat)
     assert r_man_check.json()["offers"][0]["status"] == "rejected"
 
 
-def test_automatic_order_rotates_on_expiry_via_api(client, db, signup, santexnik_cat):
-    """Taklif muddati o'tganda GET /orders/{id} orqali tizim navbatdagi ustaga avtomatik taklif beradi."""
+def test_automatic_order_picks_up_newly_eligible_master_via_api(client, db, signup, santexnik_cat):
+    """Taklif muddati o'tgach, GET /orders/{id} orqali tizim keyinroq mos bo'lib
+    qolgan (masalan endi tasdiqlangan) yangi ustaga ham avtomatik taklif beradi."""
     h_cust, u_cust = signup("customer", "+998901112233", "Mijoz Avto")
 
-    # 2 ta usta (biri Chilonzorda, biri Yunusobodda)
     h_m1, u_m1 = signup("master", "+998902223344", "Usta Bir")
     mp1 = _create_master_profile(db, u_m1["id"], city="Toshkent", district="Chilonzor")
     _add_service(db, mp1.id, santexnik_cat.id)
 
-    h_m2, u_m2 = signup("master", "+998902223355", "Usta Ikki")
-    mp2 = _create_master_profile(db, u_m2["id"], city="Toshkent", district="Yunusobod")
-    _add_service(db, mp2.id, santexnik_cat.id)
-
-    # Buyurtma yaratamiz (avtomatik)
+    # Buyurtma yaratamiz (avtomatik) — hozircha yagona mos usta mp1
     r_ord = client.post(
         ORDERS_URL,
         json={
@@ -744,8 +804,7 @@ def test_automatic_order_rotates_on_expiry_via_api(client, db, signup, santexnik
     assert r_ord.status_code == 201
     ord_data = r_ord.json()
     order_id = ord_data["id"]
-
-    # 1-usta (Chilonzordagi usta_bir) taklif olgan
+    assert len(ord_data["offers"]) == 1
     assert ord_data["offers"][0]["master_id"] == mp1.id
     assert ord_data["offers"][0]["status"] == "pending"
 
@@ -754,18 +813,27 @@ def test_automatic_order_rotates_on_expiry_via_api(client, db, signup, santexnik
     offer_obj.expires_at = datetime.now(timezone.utc) - timedelta(minutes=5)
     db.commit()
 
-    # Mijoz GET /orders/{order_id} qiladi
-    # Tizim avtomatik tarzda:
-    # 1. 1-ustaning taklifini EXPIRED qiladi
-    # 2. 2-ustaga yangi PENDING taklif jo'natadi
-    r_check = client.get(f"{ORDERS_URL}/{order_id}", headers=h_cust)
-    assert r_check.status_code == 200
-    offers = r_check.json()["offers"]
-    assert len(offers) == 2
-    assert offers[0]["master_id"] == mp1.id
-    assert offers[0]["status"] == "expired"
-    assert offers[1]["master_id"] == mp2.id
-    assert offers[1]["status"] == "pending"
+    # Hali boshqa mos usta yo'q: GET faqat EXPIRED qiladi, yangi taklif yo'q
+    r_check1 = client.get(f"{ORDERS_URL}/{order_id}", headers=h_cust)
+    assert r_check1.status_code == 200
+    offers1 = r_check1.json()["offers"]
+    assert len(offers1) == 1
+    assert offers1[0]["status"] == "expired"
+
+    # Endi Usta Ikki (Yunusobod) tasdiqlanadi va mos bo'lib qoladi
+    h_m2, u_m2 = signup("master", "+998902223355", "Usta Ikki")
+    mp2 = _create_master_profile(db, u_m2["id"], city="Toshkent", district="Yunusobod")
+    _add_service(db, mp2.id, santexnik_cat.id)
+
+    # Mijoz qayta GET qiladi: endi Usta Ikkiga yangi PENDING taklif beriladi,
+    # Usta Bir (eski, muddati o'tgan) qayta taklif qilinmaydi
+    r_check2 = client.get(f"{ORDERS_URL}/{order_id}", headers=h_cust)
+    assert r_check2.status_code == 200
+    offers2 = r_check2.json()["offers"]
+    assert len(offers2) == 2
+    statuses = {o["master_id"]: o["status"] for o in offers2}
+    assert statuses[mp1.id] == "expired"
+    assert statuses[mp2.id] == "pending"
 
     # 2-usta o'z dashboardida (`/masters/me/orders`) taklifni ko'radi
     m2_orders = client.get("/api/v1/masters/me/orders", headers=h_m2).json()
