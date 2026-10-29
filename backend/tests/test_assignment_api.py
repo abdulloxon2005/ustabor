@@ -684,6 +684,8 @@ def test_get_master_me_orders(client, db, signup, santexnik_cat):
     assert len(pending) == 1
     assert pending[0]["order_id"] == oid1
     assert pending[0]["description"] == "Kutilayotgan taklif"
+    # Mijoz ismi ko'rinishi kerak (xizmat/manzilni tanlashga yordam beradi)
+    assert pending[0]["customer_name"] == "Mijoz Karim"
     # MAXFIY MANZIL yo'qligini tekshirish
     assert "address" not in pending[0]
     assert "MAXFIY MANZIL" not in str(pending[0])

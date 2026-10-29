@@ -337,6 +337,7 @@ def get_my_orders(
         )
         .options(
             selectinload(OrderOffer.order).selectinload(Order.category),
+            selectinload(OrderOffer.order).selectinload(Order.customer),
         )
         .order_by(OrderOffer.id.desc())
     )
@@ -350,6 +351,7 @@ def get_my_orders(
             description=o.order.description,
             city=o.order.city,
             district=o.order.district,
+            customer_name=o.order.customer.full_name if o.order.customer else "",
             expires_at=o.expires_at,
             created_at=o.created_at,
         )

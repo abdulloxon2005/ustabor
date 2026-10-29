@@ -197,6 +197,7 @@ class MasterOfferItem(BaseModel):
     description: str
     city: str
     district: str
+    customer_name: str
     expires_at: datetime | None
     created_at: datetime
 

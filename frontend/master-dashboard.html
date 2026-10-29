@@ -159,6 +159,12 @@
         desc.textContent = offer.description;
         card.appendChild(desc);
 
+        const customerP = document.createElement("p");
+        customerP.style.margin = "0 0 4px";
+        customerP.style.fontWeight = "600";
+        customerP.textContent = "Mijoz: " + offer.customer_name;
+        card.appendChild(customerP);
+
         const place = document.createElement("p");
         place.className = "muted";
         place.style.margin = "0 0 12px";
