@@ -4,8 +4,9 @@ import os
 os.environ.setdefault("SECRET_KEY", "test-secret-key-faqat-testlar-uchun")
 os.environ["DATABASE_URL"] = "sqlite:///./test.db"
 # Default bo'sh: testlar haqiqiy Yandex API'ga tarmoq so'rovi yubormasligi kerak.
-# Kerak bo'lsa test o'zi monkeypatch qiladi (app.services.geo.settings.YANDEX_API_KEY).
-os.environ["YANDEX_API_KEY"] = ""
+# Kerak bo'lsa test o'zi monkeypatch qiladi (app.services.geo.settings.YANDEX_GEOCODER_API_KEY).
+os.environ["YANDEX_GEOCODER_API_KEY"] = ""
+os.environ["YANDEX_MAPS_JS_API_KEY"] = ""
 
 import re
 

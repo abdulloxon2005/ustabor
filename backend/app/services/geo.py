@@ -33,17 +33,17 @@ def geocode(query: str, results: int = 5) -> list[dict]:
     Yandex API kaliti sozlanmagan bo'lsa 503 qaytaradi.
     Tarmoq/Yandex xatoligida 502 qaytaradi (so'rovchiga tushunarli xabar bilan).
     """
-    if not settings.YANDEX_API_KEY:
+    if not settings.YANDEX_GEOCODER_API_KEY:
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE,
-            "Xarita xizmati sozlanmagan (YANDEX_API_KEY yo'q)",
+            "Xarita xizmati sozlanmagan (YANDEX_GEOCODER_API_KEY yo'q)",
         )
 
     try:
         resp = httpx.get(
             GEOCODE_URL,
             params={
-                "apikey": settings.YANDEX_API_KEY,
+                "apikey": settings.YANDEX_GEOCODER_API_KEY,
                 "geocode": query,
                 "format": "json",
                 "results": results,

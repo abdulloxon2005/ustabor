@@ -77,14 +77,14 @@ _YANDEX_OK_RESPONSE = {
 
 
 def test_geocode_without_api_key_raises_503():
-    assert settings.YANDEX_API_KEY == ""
+    assert settings.YANDEX_GEOCODER_API_KEY == ""
     with pytest.raises(Exception) as exc_info:
         geo.geocode("Toshkent")
     assert getattr(exc_info.value, "status_code", None) == 503
 
 
 def test_geocode_parses_yandex_response(monkeypatch):
-    monkeypatch.setattr(geo.settings, "YANDEX_API_KEY", "test-key")
+    monkeypatch.setattr(geo.settings, "YANDEX_GEOCODER_API_KEY", "test-key")
     monkeypatch.setattr(geo.httpx, "get", lambda *a, **k: _FakeResponse(_YANDEX_OK_RESPONSE))
 
     results = geo.geocode("Toshkent, Chilonzor")
@@ -102,17 +102,17 @@ def test_geocode_empty_results():
 
     import app.services.geo as geo_module
 
-    geo_module.settings.YANDEX_API_KEY = "test-key"
+    geo_module.settings.YANDEX_GEOCODER_API_KEY = "test-key"
     geo_module.httpx.get = _fake_get
     try:
         results = geo.geocode("Nomavjud manzil")
         assert results == []
     finally:
-        geo_module.settings.YANDEX_API_KEY = ""
+        geo_module.settings.YANDEX_GEOCODER_API_KEY = ""
 
 
 def test_geocode_http_error_raises_502(monkeypatch):
-    monkeypatch.setattr(geo.settings, "YANDEX_API_KEY", "test-key")
+    monkeypatch.setattr(geo.settings, "YANDEX_GEOCODER_API_KEY", "test-key")
 
     def _raise(*a, **k):
         raise httpx.ConnectError("ulanib bo'lmadi")
@@ -132,7 +132,7 @@ def test_geo_config_is_public_and_reflects_settings(client, monkeypatch):
     assert r_empty.status_code == 200
     assert r_empty.json() == {"yandex_maps_key": ""}
 
-    monkeypatch.setattr(geo.settings, "YANDEX_API_KEY", "test-key")
+    monkeypatch.setattr(geo.settings, "YANDEX_MAPS_JS_API_KEY", "test-key")
     r_set = client.get("/api/v1/geo/config")
     assert r_set.json() == {"yandex_maps_key": "test-key"}
 
@@ -152,7 +152,7 @@ def test_geo_search_rejects_short_query(client, signup):
 
 
 def test_geo_search_returns_candidates(client, signup, monkeypatch):
-    monkeypatch.setattr(geo.settings, "YANDEX_API_KEY", "test-key")
+    monkeypatch.setattr(geo.settings, "YANDEX_GEOCODER_API_KEY", "test-key")
     monkeypatch.setattr(geo.httpx, "get", lambda *a, **k: _FakeResponse(_YANDEX_OK_RESPONSE))
 
     h, _ = signup("customer", "+998901240002", "Mijoz Geo 2")

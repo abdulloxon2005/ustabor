@@ -55,8 +55,12 @@ class Settings(BaseSettings):
     MATCH_W_DISTANCE: float = 0.2   # Masofa bonusi (koordinatalar bo'lsa)
 
     # ===== Yandex xarita/geokodlash (Bosqich 12) =====
-    # Faqat backendda ishlatiladi (geokodlash proxy). Bo'sh bo'lsa geokodlash o'chirilgan.
-    YANDEX_API_KEY: str = ""
+    # Yandex har bir mahsulot uchun ALOHIDA kalit beradi — ikkalasi bir xil bo'lmaydi.
+    # Geocoder API kaliti: faqat backendda ishlatiladi (geokodlash proxy).
+    YANDEX_GEOCODER_API_KEY: str = ""
+    # JavaScript API kaliti: frontend xarita vidjeti uchun (brauzerda ko'rinadi,
+    # shuning uchun Yandex konsolida HTTP-referrer bilan cheklash kerak).
+    YANDEX_MAPS_JS_API_KEY: str = ""
 
     @property
     def cors_origins_list(self) -> list[str]:

@@ -12,7 +12,7 @@ router = APIRouter(prefix="/geo", tags=["geo"])
 @router.get("/config", response_model=GeoConfigOut)
 def get_geo_config():
     """Frontend xarita vidjeti uchun ommaviy sozlama (kalit bo'sh bo'lishi mumkin)."""
-    return GeoConfigOut(yandex_maps_key=settings.YANDEX_API_KEY)
+    return GeoConfigOut(yandex_maps_key=settings.YANDEX_MAPS_JS_API_KEY)
 
 
 @router.get("/search", response_model=list[GeoCandidate])
