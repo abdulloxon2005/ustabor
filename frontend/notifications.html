@@ -108,6 +108,30 @@
         meta.textContent = formatDate(n.created_at);
         card.appendChild(meta);
 
+        // Usta uchun: yangi (ochiq) taklifni shu yerdan, bitta tugma bilan olish.
+        if (user.role === "master" && n.type === "new_offer" && n.related_order_id) {
+          const takeBtn = document.createElement("button");
+          takeBtn.type = "button";
+          takeBtn.className = "btn btn-accent btn-block";
+          takeBtn.style.marginTop = "8px";
+          takeBtn.textContent = "Buyurtmani olish";
+          takeBtn.addEventListener("click", async () => {
+            takeBtn.disabled = true;
+            takeBtn.textContent = "Olinmoqda...";
+            try {
+              await apiFetch("/orders/" + n.related_order_id + "/accept", { method: "POST" });
+              toast("Buyurtma sizga rasmiylashtirildi", "success");
+              await load(true);
+              await refreshNavBadge();
+            } catch (err) {
+              toast(err.message, "error");
+              takeBtn.disabled = false;
+              takeBtn.textContent = "Buyurtmani olish";
+            }
+          });
+          card.appendChild(takeBtn);
+        }
+
         const link = orderLink(n);
         if (link) card.appendChild(link);
 
