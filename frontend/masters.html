@@ -28,6 +28,11 @@
       <button id="searchBtn" class="btn" type="submit">Qidirish</button>
     </form>
 
+    <label id="favOnlyLabel" style="display:none; align-items:center; gap:8px; margin:4px 0 12px; font-weight:400;">
+      <input id="favOnly" type="checkbox" style="width:20px; height:20px; min-height:0; margin:0;" />
+      Faqat sevimlilar
+    </label>
+
     <p id="state" class="muted" aria-live="polite"></p>
     <div id="retry-box" style="display:none; margin-bottom:12px;">
       <button id="retry-btn" class="btn btn-outline" type="button">Qayta urinish</button>
@@ -55,8 +60,48 @@
     const retryBoxEl = document.getElementById("retry-box");
     const retryBtnEl = document.getElementById("retry-btn");
     const listEl = document.getElementById("list");
+    const favOnlyLabel = document.getElementById("favOnlyLabel");
+    const favOnly = document.getElementById("favOnly");
     form.city.value = params.get("city") || "";
     form.district.value = params.get("district") || "";
+
+    const isCustomer = Boolean(user && user.role === "customer");
+    let favoriteIds = new Set();
+
+    if (isCustomer) {
+      favOnlyLabel.style.display = "flex";
+      favOnly.addEventListener("change", () => load());
+    }
+
+    async function loadFavoriteIds() {
+      if (!isCustomer) return;
+      try {
+        const favs = await apiFetch("/masters/favorites");
+        favoriteIds = new Set(favs.map((m) => m.id));
+      } catch (e) {
+        // jim o'tkazib yuboriladi: yurak belgisi shunchaki bo'sh ko'rinadi
+      }
+    }
+
+    async function toggleFavorite(masterId, btn) {
+      const isFav = favoriteIds.has(masterId);
+      btn.disabled = true;
+      try {
+        if (isFav) {
+          await apiFetch("/masters/" + masterId + "/favorite", { method: "DELETE" });
+          favoriteIds.delete(masterId);
+        } else {
+          await apiFetch("/masters/" + masterId + "/favorite", { method: "POST" });
+          favoriteIds.add(masterId);
+        }
+        btn.textContent = favoriteIds.has(masterId) ? "♥" : "♡";
+        btn.setAttribute("aria-label", favoriteIds.has(masterId) ? "Sevimlilardan olib tashlash" : "Sevimlilarga qo'shish");
+      } catch (e) {
+        toast(e.message, "error");
+      } finally {
+        btn.disabled = false;
+      }
+    }
 
     retryBtnEl.addEventListener("click", () => load());
 
@@ -83,6 +128,24 @@
         rating.textContent = "Yangi usta (0 sharh)";
       }
       head.append(name, rating);
+
+      if (isCustomer) {
+        const favBtn = document.createElement("button");
+        favBtn.type = "button";
+        favBtn.style.border = "0";
+        favBtn.style.background = "transparent";
+        favBtn.style.fontSize = "1.4rem";
+        favBtn.style.lineHeight = "1";
+        favBtn.style.color = "var(--err)";
+        favBtn.style.cursor = "pointer";
+        favBtn.style.minHeight = "44px";
+        favBtn.style.minWidth = "44px";
+        const isFav = favoriteIds.has(m.id);
+        favBtn.textContent = isFav ? "♥" : "♡";
+        favBtn.setAttribute("aria-label", isFav ? "Sevimlilardan olib tashlash" : "Sevimlilarga qo'shish");
+        favBtn.addEventListener("click", () => toggleFavorite(m.id, favBtn));
+        head.appendChild(favBtn);
+      }
 
       const place = document.createElement("p");
       place.className = "muted";
@@ -269,24 +332,33 @@
     }
 
     async function load() {
-      const q = new URLSearchParams();
-      if (categoryId) q.set("category_id", categoryId);
-      const city = form.city.value.trim();
-      const district = form.district.value.trim();
-      if (city) q.set("city", city);
-      if (district) q.set("district", district);
+      const showFavOnly = isCustomer && favOnly.checked;
 
       listEl.replaceChildren();
       searchBtn.disabled = true;
       retryBtnEl.disabled = true;
       setState("Yuklanmoqda...", false);
       try {
-        const masters = await apiFetch("/masters" + (q.toString() ? "?" + q : ""));
+        await loadFavoriteIds();
+
+        let masters;
+        if (showFavOnly) {
+          masters = await apiFetch("/masters/favorites");
+        } else {
+          const q = new URLSearchParams();
+          if (categoryId) q.set("category_id", categoryId);
+          const city = form.city.value.trim();
+          const district = form.district.value.trim();
+          if (city) q.set("city", city);
+          if (district) q.set("district", district);
+          masters = await apiFetch("/masters" + (q.toString() ? "?" + q : ""));
+        }
+
         if (!masters.length) {
           setState("", false);
           const empty = document.createElement("div");
           empty.className = "card empty-state";
-          empty.textContent = "Hozircha usta topilmadi";
+          empty.textContent = showFavOnly ? "Hali sevimli usta yo'q" : "Hozircha usta topilmadi";
           listEl.appendChild(empty);
           return;
         }

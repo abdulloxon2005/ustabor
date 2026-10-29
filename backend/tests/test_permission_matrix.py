@@ -53,6 +53,9 @@ PERMISSION_TABLE: dict[tuple[str, str], str | set[str]] = {
     ("GET", "/api/v1/masters/me/earnings"): {"master"},
     ("POST", "/api/v1/masters/me/photos"): {"master"},
     ("DELETE", "/api/v1/masters/me/photos/{photo_id}"): {"master"},
+    ("GET", "/api/v1/masters/favorites"): {"customer"},
+    ("POST", "/api/v1/masters/{master_id}/favorite"): {"customer"},
+    ("DELETE", "/api/v1/masters/{master_id}/favorite"): {"customer"},
     # Customer order routes
     ("POST", "/api/v1/orders"): {"customer"},
     ("GET", "/api/v1/orders"): {"customer"},

@@ -1,14 +1,14 @@
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Body, Depends, File, HTTPException, Path, Query, UploadFile, status
-from sqlalchemy import exists, func, select
+from sqlalchemy import delete, exists, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from app.api.deps import require_role
 from app.core.config import MAX_DB_INT
 from app.db.session import get_db
-from app.models import Category, MasterPhoto, MasterProfile, MasterService, Order, OrderOffer, Review, User
+from app.models import Category, Favorite, MasterPhoto, MasterProfile, MasterService, Order, OrderOffer, Review, User
 from app.models.enums import OfferStatus, OrderStatus, PricingType, QuoteStatus, Role
 from app.schemas.master import (
     AvailabilityIn,
@@ -388,6 +388,66 @@ def get_my_earnings(
         orders=recent_orders,
     )
 
+
+# ---------- Sevimli ustalar (mijoz) ----------
+# Diqqat: /favorites yo'li /{master_id} dan OLDIN e'lon qilinadi.
+
+
+@router.get("/favorites", response_model=list[MasterPublicOut])
+def list_favorites(
+    user: User = Depends(require_role(Role.CUSTOMER)),
+    db: Session = Depends(get_db),
+):
+    stmt = (
+        select(MasterProfile)
+        .join(Favorite, Favorite.master_id == MasterProfile.id)
+        .join(User, User.id == MasterProfile.user_id)
+        .where(
+            Favorite.customer_id == user.id,
+            MasterProfile.is_approved.is_(True),
+            User.is_active.is_(True),
+        )
+        .options(*_with_services, selectinload(MasterProfile.user))
+        .order_by(Favorite.id.desc())
+    )
+    return [_public(p) for p in db.scalars(stmt).all()]
+
+
+@router.post("/{master_id}/favorite", status_code=status.HTTP_201_CREATED)
+def add_favorite(
+    master_id: int = Path(..., le=MAX_DB_INT),
+    user: User = Depends(require_role(Role.CUSTOMER)),
+    db: Session = Depends(get_db),
+):
+    profile = db.get(MasterProfile, master_id)
+    if profile is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Usta topilmadi")
+
+    existing = db.scalar(
+        select(Favorite).where(Favorite.customer_id == user.id, Favorite.master_id == master_id)
+    )
+    if existing is None:
+        db.add(Favorite(customer_id=user.id, master_id=master_id))
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()  # poygada boshqa so'rov allaqachon qo'shgan: baribir yakuniy holat to'g'ri
+    return {"detail": "Sevimlilarga qo'shildi", "is_favorited": True}
+
+
+@router.delete("/{master_id}/favorite")
+def remove_favorite(
+    master_id: int = Path(..., le=MAX_DB_INT),
+    user: User = Depends(require_role(Role.CUSTOMER)),
+    db: Session = Depends(get_db),
+):
+    db.execute(
+        delete(Favorite).where(
+            Favorite.customer_id == user.id, Favorite.master_id == master_id
+        )
+    )
+    db.commit()
+    return {"detail": "Sevimlilardan olib tashlandi", "is_favorited": False}
 
 
 # ---------- Ommaviy ro'yxat ----------
