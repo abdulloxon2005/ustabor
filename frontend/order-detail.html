@@ -355,6 +355,23 @@
             card.appendChild(comm);
           }
 
+          const subLabels = [
+            ["quality_rating", "Sifat"],
+            ["timeliness_rating", "Vaqtida kelish"],
+            ["price_rating", "Narx adolati"],
+          ];
+          const subRow = document.createElement("div");
+          subRow.className = "muted";
+          subRow.style.marginTop = "6px";
+          subRow.style.fontSize = "0.85rem";
+          const subParts = subLabels
+            .filter(([key]) => order.review[key] != null)
+            .map(([key, label]) => label + ": ★ " + order.review[key]);
+          if (subParts.length) {
+            subRow.textContent = subParts.join(" · ");
+            card.appendChild(subRow);
+          }
+
           reviewSectionEl.appendChild(card);
           return;
         }
@@ -368,33 +385,64 @@
           title.style.marginTop = "0";
           title.textContent = "Xizmat haqida sharh qoldiring";
 
-          const starContainer = document.createElement("div");
-          starContainer.className = "star-rating";
-          starContainer.setAttribute("role", "radiogroup");
-          starContainer.setAttribute("aria-label", "Baho");
+          // minValue=1: umumiy baho (doim tanlangan); minValue=0: ixtiyoriy sub-baho
+          function makeStarPicker(initial, minValue) {
+            const container = document.createElement("div");
+            container.className = "star-rating";
+            container.setAttribute("role", "radiogroup");
 
-          let selectedRating = 5;
-          const stars = [];
+            let value = initial;
+            const starEls = [];
 
-          function updateStars(val) {
-            selectedRating = val;
-            stars.forEach((s, idx) => {
-              const isSelected = idx < val;
-              s.classList.toggle("active", isSelected);
-              s.setAttribute("aria-pressed", String(idx + 1 === val));
-            });
+            function update(val) {
+              value = val;
+              starEls.forEach((s, idx) => {
+                const isSelected = idx < val;
+                s.classList.toggle("active", isSelected);
+                s.setAttribute("aria-pressed", String(idx + 1 === val));
+              });
+            }
+
+            for (let i = 1; i <= 5; i++) {
+              const s = document.createElement("button");
+              s.type = "button";
+              s.textContent = "★";
+              s.setAttribute("aria-label", i + " yulduz");
+              s.addEventListener("click", () => update(i));
+              starEls.push(s);
+              container.appendChild(s);
+            }
+            update(initial);
+
+            return { container, getValue: () => (value === 0 ? null : value) };
           }
 
-          for (let i = 1; i <= 5; i++) {
-            const s = document.createElement("button");
-            s.type = "button";
-            s.textContent = "★";
-            s.setAttribute("aria-label", i + " yulduz");
-            s.addEventListener("click", () => updateStars(i));
-            stars.push(s);
-            starContainer.appendChild(s);
-          }
-          updateStars(5);
+          const starPicker = makeStarPicker(5, 1);
+          const starContainer = starPicker.container;
+
+          const subPickersWrap = document.createElement("div");
+          subPickersWrap.style.margin = "12px 0";
+          subPickersWrap.style.display = "grid";
+          subPickersWrap.style.gap = "8px";
+
+          const subPickerDefs = [
+            ["quality_rating", "Sifat (ixtiyoriy)"],
+            ["timeliness_rating", "Vaqtida kelish (ixtiyoriy)"],
+            ["price_rating", "Narx adolati (ixtiyoriy)"],
+          ];
+          const subPickers = {};
+          subPickerDefs.forEach(([key, labelText]) => {
+            const row = document.createElement("div");
+            const lbl = document.createElement("div");
+            lbl.className = "muted";
+            lbl.style.fontSize = "0.85rem";
+            lbl.style.marginBottom = "2px";
+            lbl.textContent = labelText;
+            const picker = makeStarPicker(0, 0);
+            row.append(lbl, picker.container);
+            subPickersWrap.appendChild(row);
+            subPickers[key] = picker;
+          });
 
           const label = document.createElement("label");
           label.setAttribute("for", "commentInput");
@@ -425,8 +473,11 @@
               await apiFetch("/orders/" + order.id + "/review", {
                 method: "POST",
                 body: JSON.stringify({
-                  rating: selectedRating,
+                  rating: starPicker.getValue(),
                   comment: textarea.value.trim() || null,
+                  quality_rating: subPickers.quality_rating.getValue(),
+                  timeliness_rating: subPickers.timeliness_rating.getValue(),
+                  price_rating: subPickers.price_rating.getValue(),
                 }),
               });
               loadOrder();
@@ -437,7 +488,7 @@
             }
           });
 
-          form.append(title, starContainer, label, textarea, errEl, submitBtn);
+          form.append(title, starContainer, subPickersWrap, label, textarea, errEl, submitBtn);
           reviewSectionEl.appendChild(form);
         }
       }

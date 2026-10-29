@@ -222,6 +222,20 @@
           const res = await apiFetch("/masters/" + m.id + "/reviews");
           const items = res.reviews || res.items || [];
           reviewsList.replaceChildren();
+
+          const subAvgParts = [];
+          if (res.quality_avg != null) subAvgParts.push("Sifat: ★ " + res.quality_avg);
+          if (res.timeliness_avg != null) subAvgParts.push("Vaqtida kelish: ★ " + res.timeliness_avg);
+          if (res.price_avg != null) subAvgParts.push("Narx adolati: ★ " + res.price_avg);
+          if (subAvgParts.length) {
+            const avgP = document.createElement("p");
+            avgP.className = "muted";
+            avgP.style.margin = "0 0 8px";
+            avgP.style.fontSize = "0.8rem";
+            avgP.textContent = subAvgParts.join(" · ");
+            reviewsList.appendChild(avgP);
+          }
+
           if (!items.length) {
             const emptyP = document.createElement("p");
             emptyP.className = "muted";

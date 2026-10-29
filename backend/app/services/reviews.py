@@ -33,12 +33,25 @@ def recompute_master_rating(db: Session, master_profile_id: int) -> MasterProfil
     return master
 
 
+def _validate_optional_rating(value: int | None, label: str) -> None:
+    if value is None:
+        return
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1 or value > 5:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            f"{label} 1 dan 5 gacha bo'lgan butun son bo'lishi kerak",
+        )
+
+
 def create_review(
     db: Session,
     order: Order,
     customer: User | int,
     rating: int,
     comment: str | None = None,
+    quality_rating: int | None = None,
+    timeliness_rating: int | None = None,
+    price_rating: int | None = None,
 ) -> Review:
     """Buyurtmaga sharh qoldirish. COMMIT QILMAYDI.
 
@@ -47,10 +60,11 @@ def create_review(
       - customer order.customer_id ga teng bo'lishi shart (aks holda 403)
       - order.master_id bo'sh bo'lmasligi kerak (aks holda 409)
       - rating 1..5 oralig'idagi butun son (aks holda 422)
+      - quality/timeliness/price_rating ixtiyoriy, berilsa 1..5 oralig'ida (aks holda 422)
       - comment ixtiyoriy, strip qilinadi, maksimal 1000 belgi (aks holda 422)
       - Bitta buyurtmaga bitta sharh (aks holda 409)
       - Unique constraint poygasi (race condition) begin_nested savepoint orqali 409 ga o'giriladi
-      - Sharh qo'shilgach recompute_master_rating chaqiriladi
+      - Sharh qo'shilgach recompute_master_rating chaqiriladi (faqat asosiy rating bo'yicha)
     """
     if order.status != OrderStatus.COMPLETED:
         raise HTTPException(
@@ -81,6 +95,10 @@ def create_review(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             "Baho 1 dan 5 gacha bo'lgan butun son bo'lishi kerak",
         )
+
+    _validate_optional_rating(quality_rating, "Sifat bahosi")
+    _validate_optional_rating(timeliness_rating, "Vaqtida kelish bahosi")
+    _validate_optional_rating(price_rating, "Narx adolati bahosi")
 
     if comment is not None:
         if not isinstance(comment, str):
@@ -113,6 +131,9 @@ def create_review(
                 master_id=order.master_id,
                 rating=rating,
                 comment=comment,
+                quality_rating=quality_rating,
+                timeliness_rating=timeliness_rating,
+                price_rating=price_rating,
             )
             db.add(review)
             db.flush()

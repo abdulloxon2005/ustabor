@@ -548,14 +548,29 @@ def list_master_reviews(
             MasterReviewItem(
                 rating=rev.rating,
                 comment=rev.comment,
+                quality_rating=rev.quality_rating,
+                timeliness_rating=rev.timeliness_rating,
+                price_rating=rev.price_rating,
                 created_at=rev.created_at,
                 customer_first_name=first_name,
             )
         )
 
+    sub_avgs = db.execute(
+        select(
+            func.avg(Review.quality_rating),
+            func.avg(Review.timeliness_rating),
+            func.avg(Review.price_rating),
+        ).where(Review.master_id == master_id)
+    ).one()
+    quality_avg, timeliness_avg, price_avg = sub_avgs
+
     return MasterReviewsOut(
         rating_avg=profile.rating_avg,
         rating_count=profile.rating_count,
+        quality_avg=round(float(quality_avg), 2) if quality_avg is not None else None,
+        timeliness_avg=round(float(timeliness_avg), 2) if timeliness_avg is not None else None,
+        price_avg=round(float(price_avg), 2) if price_avg is not None else None,
         reviews=items,
         items=items,
     )

@@ -395,3 +395,121 @@ def test_rating_propagation_and_matching(client, db, signup, make_category):
     bayes_b = matching.bayes_rating(mp_b.rating_avg, mp_b.rating_count, g_avg)
     assert bayes_a > bayes_b, f"4.8 li ko'p sharhli usta Bayes reytingi ({bayes_a}) 5.0 li 1 sharhli ustadan ({bayes_b}) katta bo'lishi kerak"
 
+
+# ---------- Batafsil sharh (quality/timeliness/price sub-reytinglar) ----------
+
+
+def test_review_with_sub_ratings(client, db, signup, make_category):
+    cat = make_category("Santexnik", "santexnik_sub1")
+    h_c, u_c = signup("customer", "+998901110020", "Mijoz Sub")
+    h_m, u_m = signup("master", "+998902220020", "Usta Sub")
+    mp = _create_master(db, u_m["id"], cat.id)
+    order_id = _create_completed_order(client, db, h_c, mp, cat.id)
+
+    r = client.post(
+        f"/api/v1/orders/{order_id}/review",
+        json={
+            "rating": 5,
+            "comment": "Juda yaxshi",
+            "quality_rating": 5,
+            "timeliness_rating": 4,
+            "price_rating": 3,
+        },
+        headers=h_c,
+    )
+    assert r.status_code == 201, r.text
+    data = r.json()
+    assert data["quality_rating"] == 5
+    assert data["timeliness_rating"] == 4
+    assert data["price_rating"] == 3
+
+    # Asosiy rating/rating_avg sub-reytinglardan ta'sirlanmaydi
+    db.expire_all()
+    mp_db = db.get(models.MasterProfile, mp.id)
+    assert mp_db.rating_avg == 5.0
+
+    r_order = client.get(f"/api/v1/orders/{order_id}", headers=h_c)
+    rev = r_order.json()["review"]
+    assert rev["quality_rating"] == 5
+    assert rev["timeliness_rating"] == 4
+    assert rev["price_rating"] == 3
+
+
+def test_review_sub_ratings_are_optional(client, db, signup, make_category):
+    cat = make_category("Santexnik", "santexnik_sub2")
+    h_c, u_c = signup("customer", "+998901110021", "Mijoz Sub2")
+    h_m, u_m = signup("master", "+998902220021", "Usta Sub2")
+    mp = _create_master(db, u_m["id"], cat.id)
+    order_id = _create_completed_order(client, db, h_c, mp, cat.id)
+
+    r = client.post(
+        f"/api/v1/orders/{order_id}/review",
+        json={"rating": 4, "comment": "Yaxshi"},
+        headers=h_c,
+    )
+    assert r.status_code == 201, r.text
+    data = r.json()
+    assert data["quality_rating"] is None
+    assert data["timeliness_rating"] is None
+    assert data["price_rating"] is None
+
+
+def test_review_sub_rating_out_of_range_422(client, db, signup, make_category):
+    cat = make_category("Santexnik", "santexnik_sub3")
+    h_c, u_c = signup("customer", "+998901110022", "Mijoz Sub3")
+    h_m, u_m = signup("master", "+998902220022", "Usta Sub3")
+    mp = _create_master(db, u_m["id"], cat.id)
+    order_id = _create_completed_order(client, db, h_c, mp, cat.id)
+
+    for bad in (0, 6, -1):
+        r = client.post(
+            f"/api/v1/orders/{order_id}/review",
+            json={"rating": 4, "quality_rating": bad},
+            headers=h_c,
+        )
+        assert r.status_code == 422, f"quality_rating={bad} -> {r.status_code}"
+
+
+def test_master_reviews_sub_rating_averages(client, db, signup, make_category):
+    cat = make_category("Santexnik", "santexnik_sub4")
+    h_m, u_m = signup("master", "+998902220023", "Usta Sub4")
+    mp = _create_master(db, u_m["id"], cat.id)
+
+    h_c1, _ = signup("customer", "+998901110023", "Mijoz A")
+    order1 = _create_completed_order(client, db, h_c1, mp, cat.id)
+    client.post(
+        f"/api/v1/orders/{order1}/review",
+        json={"rating": 5, "quality_rating": 5, "timeliness_rating": 5, "price_rating": 3},
+        headers=h_c1,
+    )
+
+    h_c2, _ = signup("customer", "+998901110024", "Mijoz B")
+    order2 = _create_completed_order(client, db, h_c2, mp, cat.id)
+    client.post(
+        f"/api/v1/orders/{order2}/review",
+        json={"rating": 3, "quality_rating": 3, "timeliness_rating": 3, "price_rating": 5},
+        headers=h_c2,
+    )
+
+    r = client.get(f"/api/v1/masters/{mp.id}/reviews")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["quality_avg"] == 4.0
+    assert body["timeliness_avg"] == 4.0
+    assert body["price_avg"] == 4.0
+
+
+def test_master_reviews_sub_rating_averages_none_when_unset(client, db, signup, make_category):
+    cat = make_category("Santexnik", "santexnik_sub5")
+    h_c, u_c = signup("customer", "+998901110025", "Mijoz Sub5")
+    h_m, u_m = signup("master", "+998902220024", "Usta Sub5")
+    mp = _create_master(db, u_m["id"], cat.id)
+    order_id = _create_completed_order(client, db, h_c, mp, cat.id)
+    client.post(f"/api/v1/orders/{order_id}/review", json={"rating": 5}, headers=h_c)
+
+    r = client.get(f"/api/v1/masters/{mp.id}/reviews")
+    body = r.json()
+    assert body["quality_avg"] is None
+    assert body["timeliness_avg"] is None
+    assert body["price_avg"] is None
+

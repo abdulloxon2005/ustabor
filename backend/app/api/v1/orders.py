@@ -129,7 +129,7 @@ def _order_detail_out(order: Order, db: Session, note: str | None = None) -> Ord
     final_price = order.agreed_price if order.status == OrderStatus.COMPLETED else None
 
     rev = db.scalar(select(Review).where(Review.order_id == order.id))
-    review_out = OrderReviewOut(rating=rev.rating, comment=rev.comment, created_at=rev.created_at) if rev else None
+    review_out = OrderReviewOut.model_validate(rev) if rev else None
     can_review = bool(order.status == OrderStatus.COMPLETED and rev is None)
 
     photos = [storage.url_for(p.file_path) for p in (order.photos or [])]
@@ -634,6 +634,9 @@ def submit_order_review(
         customer=user,
         rating=data.rating,
         comment=data.comment,
+        quality_rating=data.quality_rating,
+        timeliness_rating=data.timeliness_rating,
+        price_rating=data.price_rating,
     )
     db.commit()
     db.refresh(rev)

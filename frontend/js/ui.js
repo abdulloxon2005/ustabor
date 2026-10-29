@@ -94,7 +94,12 @@ function startPolling(fn, ms) {
   }
   function isEditingForm() {
     const el = document.activeElement;
-    return !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA");
+    if (!el) return false;
+    if (el.tagName === "INPUT" || el.tagName === "TEXTAREA") return true;
+    // Yulduz tanlagich tugmalari ham forma elementi deb hisoblanadi: aks holda
+    // fon yangilanishi foydalanuvchi hali yubormagan tanlovni o'chirib qo'yadi.
+    if (el.tagName === "BUTTON" && el.closest(".star-rating")) return true;
+    return false;
   }
 
   function tick() {
