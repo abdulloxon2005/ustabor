@@ -395,6 +395,19 @@ function haversineKm(lat1, lon1, lat2, lon2) {
   return R * c;
 }
 
+// Koordinata bo'lsa "Xaritada ko'rish" havolasini qaytaradi (Yandex Maps, yangi oynada),
+// bo'lmasa null — chaqiruvchi shart bo'yicha qo'shadi/qo'shmaydi.
+function mapLink(lat, lon) {
+  if (lat == null || lon == null) return null;
+  const a = document.createElement("a");
+  a.href = "https://yandex.com/maps/?pt=" + lon + "," + lat + "&z=16&l=map";
+  a.target = "_blank";
+  a.rel = "noopener noreferrer";
+  a.textContent = "📍 Xaritada ko'rish";
+  a.style.fontSize = "0.85rem";
+  return a;
+}
+
 const TASHKENT_CENTER = [41.2995, 69.2401];
 let _yandexMapsLoadPromise = null;
 
@@ -411,8 +424,59 @@ function _loadYandexMaps(apiKey) {
   return _yandexMapsLoadPromise;
 }
 
-// coords: [lat, lon] | null. onChange(lat, lon) xaritada belgi o'zgarganda chaqiriladi.
-function createMapPicker({ initialLat, initialLon, onChange } = {}) {
+// Brauzer geolokatsiyasini so'raydi: Promise<[lat, lon]>, rad etilsa/xato bo'lsa reject qiladi.
+function getCurrentLocation() {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error("Brauzeringiz joylashuvni aniqlashni qo'llab-quvvatlamaydi"));
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve([pos.coords.latitude, pos.coords.longitude]),
+      (err) => {
+        const msg =
+          err.code === err.PERMISSION_DENIED
+            ? "Joylashuvga ruxsat berilmadi"
+            : "Joylashuvni aniqlab bo'lmadi";
+        reject(new Error(msg));
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+    );
+  });
+}
+
+// Login/ro'yxatdan o'tishda bir marta chaqiriladi: ruxsat so'raydi va keshlaydi
+// (xatolikni jim o'tkazib yuboradi — foydalanuvchi rad etsa ham oqim davom etadi).
+function requestAndCacheLocation() {
+  getCurrentLocation()
+    .then(([lat, lon]) => {
+      try {
+        localStorage.setItem(
+          "ustabor_last_location",
+          JSON.stringify({ lat, lon, ts: Date.now() })
+        );
+      } catch (e) {}
+    })
+    .catch(() => {});
+}
+
+function _cachedLocation() {
+  try {
+    const raw = localStorage.getItem("ustabor_last_location");
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (Date.now() - data.ts > 30 * 60 * 1000) return null; // 30 daqiqadan eski — eskirgan
+    return [data.lat, data.lon];
+  } catch (e) {
+    return null;
+  }
+}
+
+// coords: [lat, lon] | null. onChange(lat, lon, source) xaritada belgi o'zgarganda chaqiriladi
+// (source: "search" | "locate" | "click" | "drag" — manzil maydonlarini avtomatik to'ldirish uchun foydali).
+// autoLocate: true bo'lsa va initialLat/Lon berilmagan bo'lsa, xarita ochilganda avtomatik
+// joriy joylashuvni so'raydi (keshlangan qiymat bo'lsa, so'ramasdan undan foydalanadi).
+function createMapPicker({ initialLat, initialLon, onChange, autoLocate } = {}) {
   const wrap = document.createElement("div");
   wrap.className = "map-picker";
 
@@ -434,7 +498,16 @@ function createMapPicker({ initialLat, initialLon, onChange } = {}) {
   searchBtn.style.padding = "0 14px";
   searchBtn.textContent = "Qidirish";
 
-  searchRow.append(searchInput, searchBtn);
+  const locateBtn = document.createElement("button");
+  locateBtn.type = "button";
+  locateBtn.className = "btn btn-outline";
+  locateBtn.style.width = "auto";
+  locateBtn.style.padding = "0 12px";
+  locateBtn.title = "Joriy joylashuvim";
+  locateBtn.setAttribute("aria-label", "Joriy joylashuvim");
+  locateBtn.textContent = "📍";
+
+  searchRow.append(searchInput, searchBtn, locateBtn);
 
   const resultsList = document.createElement("div");
   resultsList.style.display = "flex";
@@ -459,11 +532,11 @@ function createMapPicker({ initialLat, initialLon, onChange } = {}) {
   let placemark = null;
   let coords = initialLat != null && initialLon != null ? [initialLat, initialLon] : null;
 
-  function notify() {
-    if (coords && onChange) onChange(coords[0], coords[1]);
+  function notify(source) {
+    if (coords && onChange) onChange(coords[0], coords[1], source || "unknown");
   }
 
-  function placePin(lat, lon, recenter) {
+  function placePin(lat, lon, recenter, source) {
     coords = [lat, lon];
     if (map) {
       if (placemark) {
@@ -473,14 +546,29 @@ function createMapPicker({ initialLat, initialLon, onChange } = {}) {
         placemark.events.add("dragend", () => {
           const c = placemark.geometry.getCoordinates();
           coords = c;
-          notify();
+          notify("drag");
         });
         map.geoObjects.add(placemark);
       }
       if (recenter) map.setCenter([lat, lon], 15, { duration: 300 });
     }
-    notify();
+    notify(source);
   }
+
+  async function doLocate() {
+    locateBtn.disabled = true;
+    stateEl.textContent = "Joylashuv aniqlanmoqda...";
+    try {
+      const [lat, lon] = await getCurrentLocation();
+      placePin(lat, lon, true, "locate");
+      stateEl.textContent = "Joriy joylashuvingiz belgilandi. Kerak bo'lsa belgini suring.";
+    } catch (e) {
+      stateEl.textContent = e.message;
+    } finally {
+      locateBtn.disabled = false;
+    }
+  }
+  locateBtn.addEventListener("click", doLocate);
 
   async function doSearch() {
     const q = searchInput.value.trim();
@@ -505,7 +593,7 @@ function createMapPicker({ initialLat, initialLon, onChange } = {}) {
         btn.style.fontSize = "0.85rem";
         btn.textContent = item.address;
         btn.addEventListener("click", () => {
-          placePin(item.latitude, item.longitude, true);
+          placePin(item.latitude, item.longitude, true, "search");
           resultsList.replaceChildren();
         });
         resultsList.appendChild(btn);
@@ -555,10 +643,23 @@ function createMapPicker({ initialLat, initialLon, onChange } = {}) {
     });
     map.events.add("click", (e) => {
       const c = e.get("coords");
-      placePin(c[0], c[1], false);
+      placePin(c[0], c[1], false, "click");
     });
-    if (coords) placePin(coords[0], coords[1], false);
-    stateEl.textContent = "Manzilni qidiring yoki xaritada belgini bosing/suring";
+
+    if (coords) {
+      placePin(coords[0], coords[1], false, "init");
+      stateEl.textContent = "Manzilni qidiring yoki xaritada belgini bosing/suring";
+    } else if (autoLocate) {
+      const cached = _cachedLocation();
+      if (cached) {
+        placePin(cached[0], cached[1], true, "locate");
+        stateEl.textContent = "Joriy joylashuvingiz belgilandi. Kerak bo'lsa belgini suring.";
+      } else {
+        await doLocate();
+      }
+    } else {
+      stateEl.textContent = "Manzilni qidiring yoki xaritada belgini bosing/suring";
+    }
   })();
 
   return {

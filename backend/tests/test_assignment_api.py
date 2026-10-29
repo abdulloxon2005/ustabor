@@ -585,6 +585,8 @@ def test_get_master_me_orders(client, db, signup, santexnik_cat):
             "district": "Chilonzor",
             "address": "OCHIQ MANZIL 456",
             "selection_mode": "manual",
+            "latitude": 41.311151,
+            "longitude": 69.240562,
         },
         headers=h_c,
     )
@@ -621,6 +623,9 @@ def test_get_master_me_orders(client, db, signup, santexnik_cat):
     # MAXFIY MANZIL yo'qligini tekshirish
     assert "address" not in pending[0]
     assert "MAXFIY MANZIL" not in str(pending[0])
+    # Qabul qilinmagan taklifda aniq koordinata ham ko'rsatilmasligi kerak (maxfiylik)
+    assert "latitude" not in pending[0]
+    assert "longitude" not in pending[0]
 
     # Active orders
     active = data["active_orders"]
@@ -629,6 +634,9 @@ def test_get_master_me_orders(client, db, signup, santexnik_cat):
     assert active[0]["description"] == "Faol buyurtma"
     assert active[0]["address"] == "OCHIQ MANZIL 456"
     assert active[0]["customer_name"] == "Mijoz Karim"
+    # Qabul qilingach, aniq koordinata ko'rinishi kerak (ustaga manzilni aniq topish uchun)
+    assert active[0]["latitude"] == pytest.approx(41.311151)
+    assert active[0]["longitude"] == pytest.approx(69.240562)
 
     # Usta 2 ning buyurtmasi (oid3) Usta 1 da umuman yo'q
     all_ids = [p["order_id"] for p in pending] + [a["id"] for a in active]

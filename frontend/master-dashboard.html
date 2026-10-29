@@ -242,6 +242,13 @@
         addr.textContent = "Manzil: " + order.city + ", " + order.district + ", " + order.address;
         card.appendChild(addr);
 
+        const mapLinkEl = mapLink(order.latitude, order.longitude);
+        if (mapLinkEl) {
+          mapLinkEl.style.display = "inline-block";
+          mapLinkEl.style.margin = "0 0 8px";
+          card.appendChild(mapLinkEl);
+        }
+
         const customer = document.createElement("p");
         customer.className = "muted";
         customer.style.margin = "0 0 8px";

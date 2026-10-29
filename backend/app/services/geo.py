@@ -46,6 +46,7 @@ def geocode(query: str, results: int = 5) -> list[dict]:
                 "apikey": settings.YANDEX_GEOCODER_API_KEY,
                 "geocode": query,
                 "format": "json",
+                "lang": "uz_UZ",
                 "results": results,
             },
             timeout=5.0,

@@ -63,6 +63,7 @@
           body: JSON.stringify({ phone, password }),
         });
         saveSession(data.access_token, data.user);
+        if (data.user.role === "customer") requestAndCacheLocation();
         window.location.replace(homeFor(data.user));
       } catch (err) {
         errorEl.textContent = err.message;

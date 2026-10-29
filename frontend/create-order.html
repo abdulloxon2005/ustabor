@@ -88,13 +88,42 @@
       const masterBanner = document.getElementById("masterBanner");
       const modeField = document.getElementById("modeField");
       const cityInput = document.getElementById("city");
+      const districtInput = document.getElementById("district");
+      const addressInput = document.getElementById("address");
 
       const urlParams = new URLSearchParams(window.location.search);
       const preselect = urlParams.get("category_id");
       const masterId = urlParams.get("master_id");
       let targetMaster = null;
 
-      const mapPicker = createMapPicker({});
+      // Manzil maydonlari bo'sh bo'lsagina (foydalanuvchi qo'lda kiritgan matnni
+      // bosib yubormaslik uchun) joriy/qidirilgan joylashuv bo'yicha avtomatik to'ldiradi.
+      async function reverseGeocodeFill(lat, lon) {
+        if (masterId || cityInput.readOnly) return; // usta oldindan tanlangan: shahar qulflangan
+        if (cityInput.value.trim() && districtInput.value.trim() && addressInput.value.trim()) return;
+        try {
+          const results = await apiFetch(
+            "/geo/search?q=" + encodeURIComponent(lon + "," + lat)
+          );
+          if (!results.length) return;
+          const clean = (s) => (s || "").replace(/\s+(tumani|shahri|viloyati|rayoni)$/i, "").trim();
+          const parts = results[0].address.split(",").map((p) => p.trim());
+          if (!cityInput.value.trim() && parts[1]) cityInput.value = clean(parts[1]);
+          if (!districtInput.value.trim() && parts[2]) districtInput.value = clean(parts[2]);
+          if (!addressInput.value.trim() && parts.length > 3) {
+            addressInput.value = parts.slice(3).join(", ");
+          }
+        } catch (e) {
+          // jim o'tkazib yuboriladi: manzilni qo'lda kiritish imkoniyati qoladi
+        }
+      }
+
+      const mapPicker = createMapPicker({
+        autoLocate: !masterId,
+        onChange: (lat, lon, source) => {
+          if (source !== "init" && source !== "drag") reverseGeocodeFill(lat, lon);
+        },
+      });
       document.getElementById("mapContainer").appendChild(mapPicker.el);
 
       function fillCategorySelect(options, emptyText) {

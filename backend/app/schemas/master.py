@@ -185,6 +185,9 @@ class ApprovalOut(BaseModel):
 
 
 class MasterOfferItem(BaseModel):
+    """Qabul qilinmagan taklif: aniq manzil va koordinata ATAYLAB yo'q —
+    usta faqat qabul qilgach (active order) mijozning aniq joylashuvini ko'radi."""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: int
@@ -208,6 +211,8 @@ class MasterActiveOrderItem(BaseModel):
     city: str
     district: str
     address: str
+    latitude: float | None = None
+    longitude: float | None = None
     customer_name: str
     customer_full_name: str = ""
     status: OrderStatus

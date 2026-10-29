@@ -38,6 +38,7 @@
         <p class="muted" style="margin: 4px 0;">
           <strong>Manzil:</strong> <span id="addressText"></span>
         </p>
+        <p id="orderMapLinkWrap" style="margin: 4px 0; display: none;"></p>
 
         <p class="muted" style="margin: 4px 0;">
           <strong>Yaratilgan vaqti:</strong> <span id="createdText"></span>
@@ -105,6 +106,7 @@
       const statusBadgeEl = document.getElementById("statusBadge");
       const descEl = document.getElementById("desc");
       const addressTextEl = document.getElementById("addressText");
+      const orderMapLinkWrapEl = document.getElementById("orderMapLinkWrap");
       const createdTextEl = document.getElementById("createdText");
       const masterNameEl = document.getElementById("masterName");
       const priceSectionEl = document.getElementById("priceSection");
@@ -531,6 +533,14 @@
 
           descEl.textContent = order.description;
           addressTextEl.textContent = order.city + ", " + order.district + ", " + order.address;
+          orderMapLinkWrapEl.replaceChildren();
+          const orderMapLinkEl = mapLink(order.latitude, order.longitude);
+          if (orderMapLinkEl) {
+            orderMapLinkWrapEl.appendChild(orderMapLinkEl);
+            orderMapLinkWrapEl.style.display = "block";
+          } else {
+            orderMapLinkWrapEl.style.display = "none";
+          }
           createdTextEl.textContent = formatDate(order.created_at);
           masterNameEl.textContent = order.master_name || "Biriktirilmagan";
 

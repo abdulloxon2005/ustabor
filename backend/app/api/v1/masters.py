@@ -390,6 +390,8 @@ def get_my_orders(
                 city=o.city,
                 district=o.district,
                 address=o.address,
+                latitude=o.latitude,
+                longitude=o.longitude,
                 customer_name=o.customer.full_name if o.customer else "",
                 customer_full_name=o.customer.full_name if o.customer else "",
                 status=o.status,
