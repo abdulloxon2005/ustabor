@@ -1,6 +1,13 @@
-// Backend manzili sahifa ochilgan hostdan olinadi:
-// kompyuterda localhost, telefonda kompyuterning IP manzili (masalan 192.168.1.5)
-const API_BASE = `http://${window.location.hostname}:8000/api/v1`;
+// Lokal ishlab chiqishda frontend alohida statik serverda (5500-port) ishlaydi,
+// backend esa alohida jarayon sifatida 8000-portda — shuning uchun manzil host:8000
+// ga qurib beriladi (kompyuterda localhost, telefonda kompyuterning IP manzili).
+// Productionda (Docker/Nginx orqali) frontend va backend bitta domenda bo'ladi va
+// Nginx /api/v1 so'rovlarini backend konteyneriga proksi qiladi — shunda nisbiy
+// yo'l yetarli.
+const API_BASE =
+  window.location.port === "5500"
+    ? `http://${window.location.hostname}:8000/api/v1`
+    : "/api/v1";
 
 const TOKEN_KEY = "ustabor_token";
 const USER_KEY = "ustabor_user";

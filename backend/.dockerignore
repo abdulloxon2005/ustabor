@@ -1,0 +1,16 @@
+venv/
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+tests/
+*.db
+*.db-journal
+uploads/
+backups/
+sms_outbox.log
+.env
+.git
+.gitignore
+Dockerfile
+.dockerignore

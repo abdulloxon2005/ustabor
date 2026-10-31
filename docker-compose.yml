@@ -1,0 +1,51 @@
+services:
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    volumes:
+      - sqlite_data:/app/data
+      - uploads_data:/app/uploads
+      # Host papkasiga bog'langan (named volume emas) — backup skripti natijasini
+      # to'g'ridan-to'g'ri serverdan tashqariga ko'chirish (rsync/scp) uchun qulay.
+      - ./backend/backups:/app/backups
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    volumes:
+      - uploads_data:/usr/share/nginx/media:ro
+      - certbot_webroot:/var/www/certbot:ro
+      - certbot_certs:/etc/letsencrypt:ro
+    ports:
+      - "80:80"
+      - "443:443"
+
+  # HTTPS sertifikatini olish/yangilash uchun (docs/deploy.md'ga qarang).
+  # Oddiy `docker compose up -d` buyrug'ida ishga tushmaydi — faqat
+  # `docker compose run --rm certbot ...` orqali qo'lda chaqiriladi.
+  certbot:
+    image: certbot/certbot:latest
+    volumes:
+      - certbot_webroot:/var/www/certbot
+      - certbot_certs:/etc/letsencrypt
+    profiles:
+      - certbot
+
+volumes:
+  sqlite_data:
+  uploads_data:
+  certbot_webroot:
+  certbot_certs:

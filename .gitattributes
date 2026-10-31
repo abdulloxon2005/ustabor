@@ -1,0 +1,3 @@
+# Shell skriptlar Linux konteynerda LF (Unix) qator oxiri bilan ishlashi shart —
+# CRLF bo'lsa "bad interpreter" xatosi bilan ishga tushmaydi.
+*.sh text eol=lf
