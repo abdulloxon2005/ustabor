@@ -601,11 +601,23 @@
           masterNameEl.textContent = order.master_name || "Biriktirilmagan";
 
           const orderNoteBox = document.getElementById("orderNoteBox");
-          const hasPendingOffer = (order.offers || []).some((o) => o.status === "pending");
-          if (order.status === "searching" && order.selection_mode === "automatic" && !hasPendingOffer && (order.offers || []).length) {
+          if (order.selection_mode === "automatic" && order.status === "searching") {
             orderNoteBox.className = "status-banner pending";
             orderNoteBox.style.display = "block";
-            orderNoteBox.textContent = "Barcha mos ustalarga taklif yuborildi, hozircha yangi usta topilmadi. Buyurtmani bekor qilib qayta urinishingiz mumkin.";
+            orderNoteBox.textContent = "Qidirilmoqda...";
+            try {
+              const dispatch = await apiFetch("/orders/" + order.id + "/dispatch-status");
+              let text = dispatch.message;
+              if (dispatch.dispatch_radius_km < 999) {
+                text += " (radius: " + dispatch.dispatch_radius_km + " km)";
+              }
+              if (dispatch.rejected_offers || dispatch.expired_offers) {
+                text += " · rad etilgan: " + dispatch.rejected_offers + ", javobsiz: " + dispatch.expired_offers;
+              }
+              orderNoteBox.textContent = text;
+            } catch (e) {
+              orderNoteBox.textContent = order.note || "Usta qidiruvi davom etmoqda";
+            }
           } else if (order.note) {
             orderNoteBox.className = "status-banner pending";
             orderNoteBox.style.display = "block";

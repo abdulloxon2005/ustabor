@@ -91,6 +91,12 @@
         <label>Joylashuv (xaritada, ixtiyoriy)</label>
         <div id="mapContainer"></div>
 
+        <label style="display: flex; align-items: center; gap: 8px; font-weight: 400;">
+          <input id="shareLocation" type="checkbox" style="width: 20px; height: 20px; min-height: 0; margin: 0;" />
+          Jonli joylashuvni mijozlarga ulashish (yaqin ustalar qidiruvida ko'rinish uchun)
+        </label>
+        <p id="locationStatus" class="muted" style="margin: 2px 0 10px; font-size: 0.85rem;"></p>
+
         <label for="editBio">O'zingiz va tajribangiz haqida</label>
         <textarea id="editBio" name="bio" maxlength="1000" placeholder="Tajribangiz va ish tartibingiz haqida..."></textarea>
 
@@ -187,6 +193,8 @@
       const editCity = document.getElementById("editCity");
       const editDistrict = document.getElementById("editDistrict");
       const editBio = document.getElementById("editBio");
+      const shareLocation = document.getElementById("shareLocation");
+      const locationStatus = document.getElementById("locationStatus");
       const editProfileError = document.getElementById("editProfileError");
       const editProfileSuccess = document.getElementById("editProfileSuccess");
       const editProfileBtn = document.getElementById("editProfileBtn");
@@ -498,6 +506,19 @@
         });
       }
 
+      function syncLocationUi(profile) {
+        shareLocation.checked = Boolean(profile.location_sharing_enabled);
+        if (profile.location_sharing_enabled) {
+          locationStatus.textContent = profile.location_updated_at
+            ? "Ulashilmoqda · oxirgi yangilanish: " + formatDate(profile.location_updated_at)
+            : "Ulashilmoqda";
+        } else if (!profile.is_available) {
+          locationStatus.textContent = "Ulashish uchun avval \"Bo'sh\" holatini yoqing";
+        } else {
+          locationStatus.textContent = "Ulashilmagan — mijozlar sizni \"Yaqin ustalar\" qidiruvida ko'rmaydi";
+        }
+      }
+
       function renderProfileView(profile, categories) {
         currentProfile = profile;
         categoriesData = categories;
@@ -519,6 +540,7 @@
         editCity.value = profile.city || "";
         editDistrict.value = profile.district || "";
         editBio.value = profile.bio || "";
+        syncLocationUi(profile);
 
         if (!profileMapPicker) {
           profileMapPicker = createMapPicker({
@@ -618,12 +640,14 @@
           currentProfile = updated;
           availTrueRadio.checked = Boolean(updated.is_available);
           availFalseRadio.checked = !updated.is_available;
+          syncLocationUi(updated);
           availSuccess.textContent = "Saqlandi";
         } catch (err) {
           availError.textContent = err.message;
           if (currentProfile) {
             availTrueRadio.checked = Boolean(currentProfile.is_available);
             availFalseRadio.checked = !currentProfile.is_available;
+            syncLocationUi(currentProfile);
           }
         } finally {
           availTrueRadio.disabled = false;
@@ -656,26 +680,38 @@
           return;
         }
 
+        const wantsSharing = shareLocation.checked;
+        const coords = profileMapPicker ? profileMapPicker.getCoords() : null;
+        if (wantsSharing && !coords) {
+          editProfileError.textContent = "Joylashuvni ulashish uchun xaritada nuqtani belgilang";
+          return;
+        }
+
         editProfileBtn.disabled = true;
         editProfileBtn.textContent = "Saqlanmoqda...";
-
-        const payload = { city, district, bio };
-        const coords = profileMapPicker ? profileMapPicker.getCoords() : null;
-        if (coords) {
-          payload.latitude = coords[0];
-          payload.longitude = coords[1];
-        }
 
         try {
           const updated = await apiFetch("/masters/me", {
             method: "PATCH",
-            body: JSON.stringify(payload),
+            body: JSON.stringify({ city, district, bio }),
           });
           currentProfile = updated;
           updateApprovalBanner(updated);
+
+          const locationPayload = wantsSharing
+            ? { sharing_enabled: true, latitude: coords[0], longitude: coords[1] }
+            : { sharing_enabled: false };
+          const withLocation = await apiFetch("/masters/me/location", {
+            method: "POST",
+            body: JSON.stringify(locationPayload),
+          });
+          currentProfile = withLocation;
+          syncLocationUi(withLocation);
+
           editProfileSuccess.textContent = "Saqlandi";
         } catch (err) {
           editProfileError.textContent = err.message;
+          syncLocationUi(currentProfile);
         } finally {
           editProfileBtn.disabled = false;
           editProfileBtn.textContent = "Profilni saqlash";

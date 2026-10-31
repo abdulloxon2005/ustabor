@@ -22,6 +22,7 @@
       <button id="tabUsersBtn" class="tab-btn" type="button" role="tab">Foydalanuvchilar</button>
       <button id="tabCommissionsBtn" class="tab-btn" type="button" role="tab">Komissiya</button>
       <button id="tabDisputesBtn" class="tab-btn" type="button" role="tab">Shikoyatlar</button>
+      <button id="tabChatsBtn" class="tab-btn" type="button" role="tab">Chatlar</button>
       <button id="tabAuditBtn" class="tab-btn" type="button" role="tab">Audit</button>
       <button id="tabStatsBtn" class="tab-btn" type="button" role="tab">Statistika</button>
     </div>
@@ -126,6 +127,20 @@
 
     <!-- ================= TAB 3: KOMISSIYA ================= -->
     <section id="tabCommissions" style="display: none;">
+      <form id="commissionSettingsForm" class="card" style="padding: 12px; margin-bottom: 16px;" novalidate>
+        <h3 style="margin-top: 0;">Komissiya sozlamalari</h3>
+        <label style="display: flex; align-items: center; gap: 8px; font-weight: 400;">
+          <input id="commissionEnabled" type="checkbox" style="width: 20px; height: 20px; min-height: 0; margin: 0;" />
+          Komissiya yoqilgan
+        </label>
+        <label for="commissionRate">Stavka (%)</label>
+        <input id="commissionRate" type="number" min="0" max="100" style="max-width: 120px;" />
+        <p class="muted" id="commissionUpdatedAt" style="margin: 6px 0; font-size: 0.85rem;"></p>
+        <div id="commissionSettingsError" class="form-error" role="alert"></div>
+        <div id="commissionSettingsSuccess" class="form-success" aria-live="polite"></div>
+        <button id="commissionSettingsBtn" class="btn" type="submit" style="margin-top: 6px;">Saqlash</button>
+      </form>
+
       <form id="commFilterForm" class="card filters" style="padding: 12px; margin-bottom: 16px;" novalidate>
         <div>
           <label for="commDateFrom" style="margin-top: 0;">Boshlanish sanasi:</label>
@@ -202,6 +217,16 @@
         <button id="disputeRetryBtn" class="btn btn-outline" type="button">Qayta urinish</button>
       </div>
       <div id="disputeList"></div>
+    </section>
+
+    <!-- ================= TAB: CHATLAR ================= -->
+    <section id="tabChats" style="display: none;">
+      <h3 style="margin: 4px 0 8px;">Shikoyat qilingan xabarlar</h3>
+      <p id="chatsState" class="muted" aria-live="polite">Yuklanmoqda...</p>
+      <div id="chatsRetryBox" style="display: none; margin-bottom: 12px;">
+        <button id="chatsRetryBtn" class="btn btn-outline" type="button">Qayta urinish</button>
+      </div>
+      <div id="chatReportsList"></div>
     </section>
 
     <!-- ================= TAB 5: AUDIT ================= -->
@@ -299,6 +324,30 @@
           <h3 style="margin-top: 0;">Yangi foydalanuvchilar</h3>
           <canvas id="usersChart" height="100"></canvas>
         </div>
+
+        <div class="card" style="padding: 12px; margin-top: 16px;">
+          <h3 style="margin-top: 0;">Top ustalar (bajarilgan ishlar bo'yicha)</h3>
+          <div class="table-wrap">
+            <table id="topMastersTable" class="stack">
+              <thead>
+                <tr><th>Usta</th><th>Bajarilgan</th><th>Rad etilgan</th><th>Daromad</th></tr>
+              </thead>
+              <tbody id="topMastersTbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card" style="padding: 12px; margin-top: 16px;">
+          <h3 style="margin-top: 0;">Ko'p rad etadigan ustalar</h3>
+          <div class="table-wrap">
+            <table id="rejectionsTable" class="stack">
+              <thead>
+                <tr><th>Usta</th><th>Rad etilgan takliflar</th></tr>
+              </thead>
+              <tbody id="rejectionsTbody"></tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -335,6 +384,7 @@
       const tabUsersBtn = document.getElementById("tabUsersBtn");
       const tabCommissionsBtn = document.getElementById("tabCommissionsBtn");
       const tabDisputesBtn = document.getElementById("tabDisputesBtn");
+      const tabChatsBtn = document.getElementById("tabChatsBtn");
       const tabAuditBtn = document.getElementById("tabAuditBtn");
       const tabStatsBtn = document.getElementById("tabStatsBtn");
 
@@ -342,6 +392,7 @@
       const tabUsers = document.getElementById("tabUsers");
       const tabCommissions = document.getElementById("tabCommissions");
       const tabDisputes = document.getElementById("tabDisputes");
+      const tabChats = document.getElementById("tabChats");
       const tabAudit = document.getElementById("tabAudit");
       const tabStats = document.getElementById("tabStats");
 
@@ -350,6 +401,7 @@
         tabUsersBtn.classList.toggle("active", tab === "users");
         tabCommissionsBtn.classList.toggle("active", tab === "commissions");
         tabDisputesBtn.classList.toggle("active", tab === "disputes");
+        tabChatsBtn.classList.toggle("active", tab === "chats");
         tabAuditBtn.classList.toggle("active", tab === "audit");
         tabStatsBtn.classList.toggle("active", tab === "stats");
 
@@ -357,13 +409,15 @@
         tabUsers.style.display = tab === "users" ? "block" : "none";
         tabCommissions.style.display = tab === "commissions" ? "block" : "none";
         tabDisputes.style.display = tab === "disputes" ? "block" : "none";
+        tabChats.style.display = tab === "chats" ? "block" : "none";
         tabAudit.style.display = tab === "audit" ? "block" : "none";
         tabStats.style.display = tab === "stats" ? "block" : "none";
 
         if (tab === "orders") loadOrders();
         if (tab === "users") loadUsers();
-        if (tab === "commissions") loadCommissions();
+        if (tab === "commissions") { loadCommissionSettings(); loadCommissions(); }
         if (tab === "disputes") loadDisputes();
+        if (tab === "chats") loadChatReports();
         if (tab === "audit") loadAuditLog();
         if (tab === "stats") loadAnalytics();
       }
@@ -372,6 +426,7 @@
       tabUsersBtn.addEventListener("click", () => switchTab("users"));
       tabCommissionsBtn.addEventListener("click", () => switchTab("commissions"));
       tabDisputesBtn.addEventListener("click", () => switchTab("disputes"));
+      tabChatsBtn.addEventListener("click", () => switchTab("chats"));
       tabAuditBtn.addEventListener("click", () => switchTab("audit"));
       tabStatsBtn.addEventListener("click", () => switchTab("stats"));
 
@@ -774,6 +829,53 @@
                 }
               });
               actionsBox.appendChild(appBtn);
+
+              const locBtn = document.createElement("button");
+              locBtn.type = "button";
+              locBtn.className = "btn btn-outline";
+              locBtn.style.padding = "0 10px";
+              locBtn.style.fontSize = "0.85rem";
+              locBtn.textContent = "Joylashuv";
+              locBtn.addEventListener("click", async () => {
+                locBtn.disabled = true;
+                try {
+                  const loc = await apiFetch("/admin/masters/" + u.profile_id + "/location");
+                  await infoModal(loc.full_name + " joylashuvi", [
+                    "Yangilangan: " + formatDate(loc.location_updated_at),
+                    "Holat: " + (loc.is_available ? "Bo'sh" : "Band"),
+                    "https://yandex.com/maps/?pt=" + loc.longitude + "," + loc.latitude + "&z=16&l=map",
+                  ]);
+                } catch (err) {
+                  toast("Xatolik: " + err.message, "error");
+                } finally {
+                  locBtn.disabled = false;
+                }
+              });
+              actionsBox.appendChild(locBtn);
+
+              const statsBtn = document.createElement("button");
+              statsBtn.type = "button";
+              statsBtn.className = "btn btn-outline";
+              statsBtn.style.padding = "0 10px";
+              statsBtn.style.fontSize = "0.85rem";
+              statsBtn.textContent = "Statistika";
+              statsBtn.addEventListener("click", async () => {
+                statsBtn.disabled = true;
+                try {
+                  const s = await apiFetch("/admin/masters/" + u.profile_id + "/statistics");
+                  await infoModal(s.full_name + " statistikasi", [
+                    "Bajarilgan buyurtmalar: " + s.completed_orders,
+                    "Rad etilgan takliflar: " + s.rejected_offers,
+                    "Jami daromad: " + formatSom(s.gross_earnings),
+                    "Xizmatlar: " + ((s.services || []).join(", ") || "—"),
+                  ]);
+                } catch (err) {
+                  toast("Xatolik: " + err.message, "error");
+                } finally {
+                  statsBtn.disabled = false;
+                }
+              });
+              actionsBox.appendChild(statsBtn);
             }
 
             if (u.role !== "admin") {
@@ -873,6 +975,59 @@
       commNextBtn.addEventListener("click", () => {
         commOffset += COMM_LIMIT;
         loadCommissions();
+      });
+
+      const commissionSettingsForm = document.getElementById("commissionSettingsForm");
+      const commissionEnabled = document.getElementById("commissionEnabled");
+      const commissionRate = document.getElementById("commissionRate");
+      const commissionUpdatedAt = document.getElementById("commissionUpdatedAt");
+      const commissionSettingsError = document.getElementById("commissionSettingsError");
+      const commissionSettingsSuccess = document.getElementById("commissionSettingsSuccess");
+      const commissionSettingsBtn = document.getElementById("commissionSettingsBtn");
+
+      async function loadCommissionSettings() {
+        commissionSettingsError.textContent = "";
+        commissionSettingsSuccess.textContent = "";
+        try {
+          const settings = await apiFetch("/admin/settings/commission");
+          commissionEnabled.checked = Boolean(settings.enabled);
+          commissionRate.value = settings.rate;
+          commissionUpdatedAt.textContent = settings.updated_at
+            ? "Oxirgi yangilanish: " + formatDate(settings.updated_at)
+            : "";
+        } catch (err) {
+          commissionSettingsError.textContent = "Yuklashda xatolik: " + err.message;
+        }
+      }
+
+      commissionSettingsForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        commissionSettingsError.textContent = "";
+        commissionSettingsSuccess.textContent = "";
+
+        const rate = Number(commissionRate.value);
+        if (!Number.isInteger(rate) || rate < 0 || rate > 100) {
+          commissionSettingsError.textContent = "Stavka 0 dan 100 gacha butun son bo'lishi kerak";
+          return;
+        }
+
+        commissionSettingsBtn.disabled = true;
+        commissionSettingsBtn.textContent = "Saqlanmoqda...";
+        try {
+          const settings = await apiFetch("/admin/settings/commission", {
+            method: "PATCH",
+            body: JSON.stringify({ enabled: commissionEnabled.checked, rate }),
+          });
+          commissionUpdatedAt.textContent = settings.updated_at
+            ? "Oxirgi yangilanish: " + formatDate(settings.updated_at)
+            : "";
+          commissionSettingsSuccess.textContent = "Saqlandi";
+        } catch (err) {
+          commissionSettingsError.textContent = err.message;
+        } finally {
+          commissionSettingsBtn.disabled = false;
+          commissionSettingsBtn.textContent = "Saqlash";
+        }
       });
 
       async function loadCommissions() {
@@ -984,6 +1139,144 @@
       const disputeRetryBox = document.getElementById("disputeRetryBox");
       const disputeRetryBtn = document.getElementById("disputeRetryBtn");
       const disputeList = document.getElementById("disputeList");
+
+      // ================= TAB: CHATLAR =================
+      const chatsState = document.getElementById("chatsState");
+      const chatsRetryBox = document.getElementById("chatsRetryBox");
+      const chatsRetryBtn = document.getElementById("chatsRetryBtn");
+      const chatReportsList = document.getElementById("chatReportsList");
+      chatsRetryBtn.addEventListener("click", () => loadChatReports());
+
+      function renderChatReport(r) {
+        const card = document.createElement("div");
+        card.className = "card";
+
+        const head = document.createElement("div");
+        head.className = "card-row";
+        const title = document.createElement("strong");
+        title.textContent = "Buyurtma #" + r.order_id;
+        const badge = document.createElement("span");
+        badge.className = "badge";
+        badge.textContent = r.status === "open" ? "Ko'rib chiqilmoqda" : (r.status === "resolved" ? "Hal qilindi" : "Rad etildi");
+        head.append(title, badge);
+        card.appendChild(head);
+
+        const meta = document.createElement("p");
+        meta.className = "muted";
+        meta.style.margin = "4px 0";
+        meta.textContent = (r.reporter_name || "Foydalanuvchi") + " · " + formatDate(r.created_at);
+        card.appendChild(meta);
+
+        const reason = document.createElement("p");
+        reason.style.margin = "4px 0";
+        reason.textContent = "Sabab: " + r.reason;
+        card.appendChild(reason);
+
+        const body = document.createElement("p");
+        body.className = "muted";
+        body.style.margin = "4px 0";
+        body.style.padding = "6px 8px";
+        body.style.background = "var(--bg)";
+        body.style.borderRadius = "8px";
+        body.textContent = "Xabar: " + (r.message_body || "—");
+        card.appendChild(body);
+
+        if (r.admin_note) {
+          const note = document.createElement("p");
+          note.className = "muted";
+          note.style.margin = "4px 0";
+          note.style.fontSize = "0.85rem";
+          note.textContent = "Admin izohi: " + r.admin_note;
+          card.appendChild(note);
+        }
+
+        if (r.status === "open") {
+          const noteInput = document.createElement("textarea");
+          noteInput.placeholder = "Izoh (ixtiyoriy)";
+          noteInput.maxLength = 1000;
+          noteInput.style.marginTop = "8px";
+          card.appendChild(noteInput);
+
+          const btnRow = document.createElement("div");
+          btnRow.style.display = "flex";
+          btnRow.style.gap = "8px";
+          btnRow.style.marginTop = "8px";
+
+          const hideBtn = document.createElement("button");
+          hideBtn.type = "button";
+          hideBtn.className = "btn btn-danger";
+          hideBtn.style.flex = "1";
+          hideBtn.textContent = "Xabarni yashirish";
+
+          const dismissBtn = document.createElement("button");
+          dismissBtn.type = "button";
+          dismissBtn.className = "btn btn-outline";
+          dismissBtn.style.flex = "1";
+          dismissBtn.textContent = "Shikoyatni rad etish";
+
+          async function moderate(hide) {
+            const msg = hide ? "Xabarni yashirasizmi?" : "Shikoyatni rad etasizmi (xabar yashirilmaydi)?";
+            if (!(await confirmModal(msg))) return;
+            hideBtn.disabled = true;
+            dismissBtn.disabled = true;
+            try {
+              await apiFetch("/admin/chats/" + r.order_id + "/moderation", {
+                method: "POST",
+                body: JSON.stringify({
+                  message_id: r.message_id,
+                  hide,
+                  note: noteInput.value.trim() || null,
+                }),
+              });
+              toast("Saqlandi", "success");
+              loadChatReports();
+            } catch (err) {
+              toast(err.message, "error");
+              hideBtn.disabled = false;
+              dismissBtn.disabled = false;
+            }
+          }
+
+          hideBtn.addEventListener("click", () => moderate(true));
+          dismissBtn.addEventListener("click", () => moderate(false));
+
+          btnRow.append(hideBtn, dismissBtn);
+          card.appendChild(btnRow);
+        }
+
+        return card;
+      }
+
+      async function loadChatReports() {
+        chatReportsList.replaceChildren();
+        chatsRetryBox.style.display = "none";
+        chatsRetryBtn.disabled = true;
+        chatsState.textContent = "Yuklanmoqda...";
+        chatsState.className = "muted";
+        try {
+          const reports = await apiFetch("/admin/chats/reported?status=open");
+          chatsRetryBtn.disabled = false;
+          if (!reports.length) {
+            chatsState.textContent = "";
+            const empty = document.createElement("div");
+            empty.className = "card empty-state";
+            empty.textContent = "Ko'rib chiqilmagan shikoyat yo'q";
+            chatReportsList.appendChild(empty);
+            return;
+          }
+          chatsState.textContent = reports.length + " ta shikoyat";
+          reports.forEach((r) => chatReportsList.appendChild(renderChatReport(r)));
+        } catch (err) {
+          chatsRetryBtn.disabled = false;
+          if (err.status === 403) {
+            renderForbidden(err.message);
+            return;
+          }
+          chatsState.textContent = "Xatolik: " + err.message;
+          chatsState.className = "err";
+          chatsRetryBox.style.display = "block";
+        }
+      }
 
       disputeStatusFilter.addEventListener("change", () => loadDisputes());
       disputeRetryBtn.addEventListener("click", () => loadDisputes());
@@ -1336,6 +1629,7 @@
           });
 
           statsContent.style.display = "block";
+          await loadMasterPerformance(days);
         } catch (err) {
           statsRetryBtn.disabled = false;
           if (err.status === 403) {
@@ -1345,6 +1639,78 @@
           statsState.textContent = "Xatolik: " + err.message;
           statsState.className = "err";
           statsRetryBox.style.display = "block";
+        }
+      }
+
+      async function loadMasterPerformance(days) {
+        const topMastersTbody = document.getElementById("topMastersTbody");
+        const rejectionsTbody = document.getElementById("rejectionsTbody");
+        const endDate = new Date();
+        const startDate = new Date();
+        startDate.setDate(startDate.getDate() - Number(days));
+        const q = "?start_date=" + startDate.toISOString().slice(0, 10) +
+                   "&end_date=" + endDate.toISOString().slice(0, 10) + "&limit=10";
+
+        try {
+          const masters = await apiFetch("/admin/analytics/masters" + q);
+          topMastersTbody.replaceChildren();
+          if (!masters.length) {
+            const tr = document.createElement("tr");
+            const td = document.createElement("td");
+            td.colSpan = 4;
+            td.className = "muted";
+            td.textContent = "Ma'lumot yo'q";
+            tr.appendChild(td);
+            topMastersTbody.appendChild(tr);
+          } else {
+            masters.forEach((m) => {
+              const tr = document.createElement("tr");
+              const tdName = document.createElement("td");
+              tdName.setAttribute("data-label", "Usta");
+              tdName.textContent = m.full_name;
+              const tdDone = document.createElement("td");
+              tdDone.setAttribute("data-label", "Bajarilgan");
+              tdDone.textContent = m.completed_orders;
+              const tdRej = document.createElement("td");
+              tdRej.setAttribute("data-label", "Rad etilgan");
+              tdRej.textContent = m.rejected_offers;
+              const tdGross = document.createElement("td");
+              tdGross.setAttribute("data-label", "Daromad");
+              tdGross.textContent = formatSom(m.gross_earnings);
+              tr.append(tdName, tdDone, tdRej, tdGross);
+              topMastersTbody.appendChild(tr);
+            });
+          }
+        } catch (e) {
+          // jim o'tkazib yuboriladi: asosiy statistika allaqachon ko'rsatildi
+        }
+
+        try {
+          const rejections = await apiFetch("/admin/analytics/rejections" + q);
+          rejectionsTbody.replaceChildren();
+          if (!rejections.length) {
+            const tr = document.createElement("tr");
+            const td = document.createElement("td");
+            td.colSpan = 2;
+            td.className = "muted";
+            td.textContent = "Ma'lumot yo'q";
+            tr.appendChild(td);
+            rejectionsTbody.appendChild(tr);
+          } else {
+            rejections.forEach((r) => {
+              const tr = document.createElement("tr");
+              const tdName = document.createElement("td");
+              tdName.setAttribute("data-label", "Usta");
+              tdName.textContent = r.master_name;
+              const tdCount = document.createElement("td");
+              tdCount.setAttribute("data-label", "Rad etilgan takliflar");
+              tdCount.textContent = r.rejected_offers;
+              tr.append(tdName, tdCount);
+              rejectionsTbody.appendChild(tr);
+            });
+          }
+        } catch (e) {
+          // jim o'tkazib yuboriladi: asosiy statistika allaqachon ko'rsatildi
         }
       }
 

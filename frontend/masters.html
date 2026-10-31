@@ -83,6 +83,20 @@
 
     const isCustomer = Boolean(user && user.role === "customer");
     let favoriteIds = new Set();
+    let nearbyDistanceById = new Map();
+
+    async function loadNearbyDistances() {
+      nearbyDistanceById = new Map();
+      if (orderLat == null || orderLon == null || !isCustomer) return;
+      try {
+        const nearby = await apiFetch(
+          "/masters/nearby?latitude=" + orderLat + "&longitude=" + orderLon + "&radius_km=500"
+        );
+        nearby.forEach((n) => nearbyDistanceById.set(n.id, n.distance_km));
+      } catch (e) {
+        // jim o'tkazib yuboriladi: masofa shunchaki ko'rsatilmaydi
+      }
+    }
 
     if (isCustomer) {
       favOnlyLabel.style.display = "flex";
@@ -179,8 +193,8 @@
       const place = document.createElement("p");
       place.className = "muted master-card-location";
       place.textContent = m.city + ", " + m.district;
-      if (orderLat != null && orderLon != null && m.latitude != null && m.longitude != null) {
-        const distKm = haversineKm(orderLat, orderLon, m.latitude, m.longitude);
+      const distKm = nearbyDistanceById.get(m.id);
+      if (distKm != null) {
         place.textContent += " · ~" + (distKm < 10 ? distKm.toFixed(1) : Math.round(distKm)) + " km";
       }
       body.appendChild(place);
@@ -406,6 +420,7 @@
       setState("Yuklanmoqda...", false);
       try {
         await loadFavoriteIds();
+        await loadNearbyDistances();
 
         let masters;
         if (showFavOnly) {

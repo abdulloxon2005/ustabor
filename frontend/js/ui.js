@@ -83,6 +83,123 @@ function confirmModal(message, options) {
   });
 }
 
+// Matn kiritish uchun modal. Natija: Promise<string|null> — "Ha" bosilsa qiymat
+// (bo'sh bo'lsa null), "Yo'q"/Esc/tashqariga bosilsa null.
+function promptModal(message, options) {
+  options = options || {};
+  return new Promise((resolve) => {
+    const overlay = document.createElement("div");
+    overlay.className = "modal-overlay";
+
+    const box = document.createElement("div");
+    box.className = "modal-content";
+    box.setAttribute("role", "dialog");
+    box.setAttribute("aria-modal", "true");
+
+    const text = document.createElement("p");
+    text.style.margin = "0 0 10px";
+    text.style.fontWeight = "600";
+    text.textContent = message;
+
+    const input = document.createElement("textarea");
+    input.placeholder = options.placeholder || "";
+    input.maxLength = options.maxLength || 500;
+    input.style.minHeight = "72px";
+
+    const row = document.createElement("div");
+    row.className = "modal-actions";
+
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "btn btn-outline";
+    cancelBtn.style.flex = "1";
+    cancelBtn.textContent = options.cancelLabel || "Bekor qilish";
+
+    const okBtn = document.createElement("button");
+    okBtn.type = "button";
+    okBtn.className = "btn " + (options.danger ? "btn-danger" : "btn-accent");
+    okBtn.style.flex = "1";
+    okBtn.textContent = options.okLabel || "Yuborish";
+
+    function close(result) {
+      document.removeEventListener("keydown", onKeyDown);
+      overlay.remove();
+      resolve(result);
+    }
+    function onKeyDown(e) {
+      if (e.key === "Escape") close(null);
+    }
+
+    cancelBtn.addEventListener("click", () => close(null));
+    okBtn.addEventListener("click", () => close(input.value.trim() || null));
+    overlay.addEventListener("click", (e) => {
+      if (e.target === overlay) close(null);
+    });
+
+    row.append(cancelBtn, okBtn);
+    box.append(text, input, row);
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+    document.addEventListener("keydown", onKeyDown);
+    input.focus();
+  });
+}
+
+// Faqat o'qish uchun ma'lumot modali (native alert() o'rniga — alert bloklaydigan
+// va avtomatlashtirishda (va ba'zi brauzer muhitlarida) ishonchsiz ishlaydi).
+// lines: satrlar massivi. Natija: Promise<void> — "Yopish" bosilgach hal bo'ladi.
+function infoModal(title, lines) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement("div");
+    overlay.className = "modal-overlay";
+
+    const box = document.createElement("div");
+    box.className = "modal-content";
+    box.setAttribute("role", "dialog");
+    box.setAttribute("aria-modal", "true");
+
+    const head = document.createElement("h2");
+    head.style.margin = "0 0 10px";
+    head.style.fontSize = "1.1rem";
+    head.textContent = title;
+    box.appendChild(head);
+
+    (lines || []).forEach((line) => {
+      const p = document.createElement("p");
+      p.style.margin = "4px 0";
+      p.style.fontSize = "0.9rem";
+      p.textContent = line;
+      box.appendChild(p);
+    });
+
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = "btn btn-block";
+    closeBtn.style.marginTop = "12px";
+    closeBtn.textContent = "Yopish";
+
+    function close() {
+      document.removeEventListener("keydown", onKeyDown);
+      overlay.remove();
+      resolve();
+    }
+    function onKeyDown(e) {
+      if (e.key === "Escape") close();
+    }
+
+    closeBtn.addEventListener("click", close);
+    overlay.addEventListener("click", (e) => {
+      if (e.target === overlay) close();
+    });
+
+    box.appendChild(closeBtn);
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+    document.addEventListener("keydown", onKeyDown);
+    closeBtn.focus();
+  });
+}
+
 // fn har `ms` millisoniyada chaqiriladi, lekin faqat tab ko'rinib turganda.
 // Qaytaradi: stop() — pollingni to'xtatish uchun.
 function startPolling(fn, ms) {
@@ -257,6 +374,38 @@ function createChatWidget(orderId, currentUserId) {
       bodyEl.textContent = m.body;
 
       bubble.append(nameEl, bodyEl);
+
+      if (!mine) {
+        const reportBtn = document.createElement("button");
+        reportBtn.type = "button";
+        reportBtn.title = "Xabar haqida shikoyat qilish";
+        reportBtn.setAttribute("aria-label", "Xabar haqida shikoyat qilish");
+        reportBtn.textContent = "⚠";
+        reportBtn.style.border = "0";
+        reportBtn.style.background = "transparent";
+        reportBtn.style.cursor = "pointer";
+        reportBtn.style.opacity = "0.6";
+        reportBtn.style.float = "right";
+        reportBtn.style.fontSize = "0.8rem";
+        reportBtn.addEventListener("click", async () => {
+          const reason = await promptModal(
+            "Nima uchun shikoyat qilyapsiz?",
+            { placeholder: "Shikoyat sababini yozing (kamida 5 belgi)", okLabel: "Shikoyat qilish" }
+          );
+          if (!reason) return;
+          try {
+            await apiFetch("/orders/" + orderId + "/messages/" + m.id + "/report", {
+              method: "POST",
+              body: JSON.stringify({ reason }),
+            });
+            toast("Shikoyat yuborildi", "success");
+          } catch (err) {
+            toast(err.message, "error");
+          }
+        });
+        bubble.appendChild(reportBtn);
+      }
+
       list.appendChild(bubble);
     });
     list.scrollTop = list.scrollHeight;
