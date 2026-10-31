@@ -87,6 +87,8 @@ def score_master(master: MasterProfile, order: Order, global_avg: float) -> floa
     # Masofa bonusi: ikkala tomonda koordinata bo'lsagina hisoblanadi
     distance_bonus = 0.0
     if (
+        master.location_sharing_enabled
+        and
         master.latitude is not None
         and master.longitude is not None
         and order.latitude is not None
@@ -139,14 +141,73 @@ def rank_masters(
     db: Session,
     order: Order,
     exclude_master_ids: set[int] | None = None,
+    radius_km: float | None = None,
 ) -> list[MasterProfile]:
     """eligible_masters + score bo'yicha tartiblash (katta -> kichik, id tie-break)."""
     masters = eligible_masters(db, order, exclude_master_ids)
+    if radius_km is not None and order.latitude is not None and order.longitude is not None:
+        masters = [
+            m for m in masters
+            if m.location_sharing_enabled
+            and m.latitude is not None and m.longitude is not None
+            and geo.haversine_km(order.latitude, order.longitude, m.latitude, m.longitude) <= radius_km
+        ]
     g_avg = global_average(db)
     return sorted(
         masters,
         key=lambda m: (-score_master(m, order, g_avg), m.id),
     )
+
+
+DISPATCH_RADII_KM = (5, 15, 30, 50)
+
+
+def dispatch_next_wave(db: Session, order: Order) -> tuple[list[OrderOffer], str]:
+    """Send one radius wave, excluding every master already offered this order.
+
+    Caller owns commit. Existing atomically-claimed order flow decides the
+    winner; this function only opens the next wave after pending offers resolve.
+    """
+    expire_stale_offers(db, order)
+    # Sessions intentionally disable autoflush; caller may just have rejected
+    # an offer, so persist pending status changes before counting open offers.
+    db.flush()
+    if order.status != OrderStatus.SEARCHING:
+        return [], "assigned" if order.master_id else "closed"
+
+    pending = db.scalar(select(func.count(OrderOffer.id)).where(
+        OrderOffer.order_id == order.id, OrderOffer.status == OfferStatus.PENDING
+    )) or 0
+    if pending:
+        return [], "waiting"
+
+    excluded = _already_offered_ids(db, order)
+    if order.latitude is None or order.longitude is None:
+        candidates = rank_masters(db, order, excluded)
+        radius = 999
+    else:
+        next_radius = next((r for r in DISPATCH_RADII_KM if r > order.dispatch_radius_km), None)
+        if next_radius is None:
+            candidates = rank_masters(db, order, excluded)
+            # Final city-wide expansion also admits masters without shared GPS.
+            radius = 999
+        else:
+            candidates = rank_masters(db, order, excluded, radius_km=next_radius)
+            radius = next_radius
+            # Masters who have not opted into live location still participate
+            # as a city-wide fallback when the current GPS radius is empty.
+            if not candidates:
+                unknown = [m for m in eligible_masters(db, order, excluded)
+                           if not m.location_sharing_enabled
+                           or m.latitude is None or m.longitude is None]
+                g_avg = global_average(db)
+                candidates = sorted(unknown,
+                                    key=lambda m: (-score_master(m, order, g_avg), m.id))
+
+    order.dispatch_radius_km = radius
+    if not candidates:
+        return [], "exhausted"
+    return [create_offer(db, order, master) for master in candidates], "offered"
 
 
 # ---------- Takliflar (offers) ----------
@@ -251,5 +312,6 @@ def rotate_stale_automatic_orders(db: Session, order: Order | None = None) -> in
     auto_orders = db.scalars(stmt).all()
     count = 0
     for ord_obj in auto_orders:
-        count += len(broadcast_offers(db, ord_obj))
+        offers, _ = dispatch_next_wave(db, ord_obj)
+        count += len(offers)
     return count

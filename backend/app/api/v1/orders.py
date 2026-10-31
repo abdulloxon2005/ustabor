@@ -5,9 +5,9 @@ from sqlalchemy import exists, func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.api.deps import get_current_user, require_role
-from app.core.config import MAX_DB_INT, settings
+from app.core.config import MAX_DB_INT
 from app.db.session import get_db
-from app.models import Category, Dispute, MasterProfile, MasterService, Order, OrderMessage, OrderOffer, OrderPhoto, OrderStatusHistory, Quote, Review, User
+from app.models import Category, ChatReport, Dispute, MasterProfile, MasterService, Order, OrderMessage, OrderOffer, OrderPhoto, OrderStatusHistory, Quote, Review, User
 from app.models.enums import DisputeStatus, OfferStatus, OrderStatus, Role, SelectionMode
 from app.schemas.dispute import DisputeCreate, DisputeOut
 from app.schemas.message import MessageIn, MessageOut
@@ -23,7 +23,8 @@ from app.schemas.order import (
 from app.schemas.photo import PhotoOut
 from app.schemas.quote import QuoteIn, QuoteOut
 from app.schemas.review import OrderReviewOut, ReviewCreate, ReviewOut
-from app.services import matching, pricing, reviews, storage
+from app.schemas.mobile import ChatReportIn, ChatReportOut, DispatchStatusOut
+from app.services import matching, notify, pricing, reviews, storage
 from app.services.order_flow import assign_master, create_order_history, transition
 
 router = APIRouter(prefix="/orders", tags=["orders"])
@@ -228,7 +229,7 @@ def create_order(
         selection_mode=SelectionMode(data.selection_mode),
         master_id=None,
         agreed_price=None,
-        commission_rate=settings.COMMISSION_RATE,
+        commission_rate=pricing.current_commission_rate(db),
         commission_amount=None,
     )
     db.add(order)
@@ -237,13 +238,82 @@ def create_order(
 
     note = None
     if order.selection_mode == SelectionMode.AUTOMATIC:
-        offers = matching.broadcast_offers(db, order, user)
-        if not offers:
+        offers, dispatch_state = matching.dispatch_next_wave(db, order)
+        if not offers and dispatch_state == "exhausted":
             note = "Mos usta topilmadi"
 
     db.commit()
     db.refresh(order)
     return _order_out(_own_order(order.id, user, db), db, note=note)
+
+
+def _dispatch_status(order: Order, db: Session) -> DispatchStatusOut:
+    counts = dict(db.query(OrderOffer.status, func.count(OrderOffer.id))
+                  .filter(OrderOffer.order_id == order.id)
+                  .group_by(OrderOffer.status).all())
+    pending = counts.get(OfferStatus.PENDING, 0)
+    rejected = counts.get(OfferStatus.REJECTED, 0)
+    expired = counts.get(OfferStatus.EXPIRED, 0)
+    if order.status == OrderStatus.ASSIGNED:
+        state, message = "assigned", "Usta buyurtmani qabul qildi"
+    elif order.status != OrderStatus.SEARCHING:
+        state, message = order.status.value, "Buyurtma qidiruvda emas"
+    elif pending:
+        state, message = "waiting", "Ustalar javobi kutilmoqda"
+    elif order.dispatch_radius_km >= 999:
+        state, message = "exhausted", "Mos ustalar topilmadi"
+    else:
+        state, message = "searching", "Usta qidiruvi davom etmoqda"
+    return DispatchStatusOut(
+        order_id=order.id, status=state,
+        dispatch_radius_km=order.dispatch_radius_km,
+        pending_offers=pending, rejected_offers=rejected,
+        expired_offers=expired, accepted_master_id=order.master_id,
+        message=message,
+    )
+
+
+@router.post("/{order_id}/dispatch", response_model=DispatchStatusOut)
+def dispatch_order(
+    order_id: int = Path(..., le=MAX_DB_INT),
+    user: User = Depends(require_role(Role.CUSTOMER)),
+    db: Session = Depends(get_db),
+):
+    order = _own_order(order_id, user, db)
+    if order.selection_mode != SelectionMode.AUTOMATIC:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Dispatch faqat automatic buyurtma uchun")
+    offers, _ = matching.dispatch_next_wave(db, order)
+    db.commit()
+    db.refresh(order)
+    result = _dispatch_status(order, db)
+    if not offers and result.status == "searching":
+        result.message = "Bu radiusda usta topilmadi; qayta dispatch qilib radiusni kengaytiring"
+    return result
+
+
+@router.get("/{order_id}/dispatch-status", response_model=DispatchStatusOut)
+def get_dispatch_status(
+    order_id: int = Path(..., le=MAX_DB_INT),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    order = db.get(Order, order_id)
+    if order is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Buyurtma topilmadi")
+    if user.role == Role.CUSTOMER and order.customer_id != user.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Buyurtma topilmadi")
+    if user.role == Role.MASTER:
+        profile = db.scalar(select(MasterProfile).where(MasterProfile.user_id == user.id))
+        if profile is None or not db.scalar(select(OrderOffer.id).where(
+            OrderOffer.order_id == order.id, OrderOffer.master_id == profile.id
+        )) and order.master_id != profile.id:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Buyurtma topilmadi")
+    if user.role not in {Role.CUSTOMER, Role.MASTER, Role.ADMIN}:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Ruxsat yo'q")
+    matching.expire_stale_offers(db, order)
+    db.commit()
+    db.refresh(order)
+    return _dispatch_status(order, db)
 
 
 @router.get("", response_model=list[OrderListItem])
@@ -476,10 +546,12 @@ def reject_offer(
         and order.selection_mode == SelectionMode.AUTOMATIC
         and order.status == OrderStatus.SEARCHING
     ):
-        # Broadcast rejimida hamma mos usta allaqachon taklif olgan bo'ladi —
-        # bu faqat shu orada YANGI mos bo'lib qolgan (masalan endi tasdiqlangan) usta bo'lsa ishlaydi.
-        new_offers = matching.broadcast_offers(db, order, user)
+        new_offers, _ = matching.dispatch_next_wave(db, order)
         next_offered = len(new_offers) > 0
+        notify.notify_user(
+            db, order.customer_id, "offer_rejected", "Usta taklifni rad etdi",
+            f"#{order.id} buyurtmasi uchun boshqa usta qidirilmoqda", order_id=order.id,
+        )
 
     db.commit()
     return {
@@ -760,11 +832,13 @@ def list_order_messages(
     limit = min(max(limit, 1), 200)
     offset = min(max(offset, 0), MAX_DB_INT)
 
+    stmt = select(OrderMessage, User.full_name).join(User, OrderMessage.sender_id == User.id).where(
+        OrderMessage.order_id == order.id
+    )
+    if user.role != Role.ADMIN:
+        stmt = stmt.where(OrderMessage.is_hidden.is_(False))
     rows = db.execute(
-        select(OrderMessage, User.full_name)
-        .join(User, OrderMessage.sender_id == User.id)
-        .where(OrderMessage.order_id == order.id)
-        .order_by(OrderMessage.id.asc())
+        stmt.order_by(OrderMessage.id.asc())
         .offset(offset)
         .limit(limit)
     ).all()
@@ -799,6 +873,9 @@ def create_order_message(
 
     msg = OrderMessage(order_id=order.id, sender_id=user.id, body=data.body)
     db.add(msg)
+    recipient_id = order.customer_id if user.role == Role.MASTER else order.master.user_id
+    notify.notify_user(db, recipient_id, "new_message", "Yangi xabar",
+                       f"#{order.id} buyurtmasida yangi xabar bor", order_id=order.id)
     db.commit()
     db.refresh(msg)
 
@@ -810,6 +887,31 @@ def create_order_message(
         body=msg.body,
         created_at=msg.created_at,
     )
+
+
+@router.post("/{order_id}/messages/{message_id}/report", response_model=ChatReportOut,
+             status_code=status.HTTP_201_CREATED)
+def report_chat_message(
+    data: ChatReportIn,
+    order_id: int = Path(..., le=MAX_DB_INT),
+    message_id: int = Path(..., le=MAX_DB_INT),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    order, can_write = _order_for_participant(order_id, user, db)
+    if not can_write:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, PARTICIPANT_FORBIDDEN)
+    message = db.scalar(select(OrderMessage).where(
+        OrderMessage.id == message_id, OrderMessage.order_id == order.id
+    ))
+    if message is None or message.sender_id == user.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Shikoyat qilinadigan xabar topilmadi")
+    report = ChatReport(order_id=order.id, message_id=message.id,
+                        reported_by=user.id, reason=data.reason)
+    db.add(report)
+    db.commit()
+    db.refresh(report)
+    return report
 
 
 # ---------- Shikoyat/nizo ----------

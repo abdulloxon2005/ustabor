@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from sqlalchemy import func, or_, select
@@ -11,10 +11,13 @@ from app.db.session import get_db
 from app.models import (
     AdminAuditLog,
     Category,
+    ChatReport,
     Dispute,
     MasterProfile,
     Order,
+    OrderMessage,
     Payment,
+    PlatformSetting,
     Review,
     User,
 )
@@ -37,7 +40,13 @@ from app.schemas.category import CategoryCreate, CategoryOut, CategoryUpdate, sl
 from app.schemas.master import ApprovalIn, ApprovalOut
 from app.schemas.order import HistoryOut, OfferOut
 from app.schemas.quote import QuoteOut
+from app.schemas.mobile import (
+    AdminMasterItem, AdminMasterStats, AnalyticsFilter, ChatMessageModerationIn,
+    ChatReportOut, CommissionSettingsIn, CommissionSettingsOut,
+    MasterLocationOut,
+)
 from app.services import admin_ops, notify
+from app.services import admin_analytics
 from app.services.order_flow import transition
 
 # Router darajasida: admindan boshqa hech kim kira olmaydi
@@ -52,6 +61,22 @@ SLUG_TAKEN = "Bu slug allaqachon mavjud"
 
 def _clamp_pagination(limit: int, offset: int) -> tuple[int, int]:
     return min(max(limit, 1), 100), min(max(offset, 0), MAX_DB_INT)
+
+
+def _analytics_filter(
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+    category_id: int | None = Query(default=None, gt=0, le=MAX_DB_INT),
+    master_id: int | None = Query(default=None, gt=0, le=MAX_DB_INT),
+    region: str | None = Query(default=None, max_length=80),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0, le=MAX_DB_INT),
+) -> AnalyticsFilter:
+    if start_date and end_date and start_date > end_date:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "start_date end_date dan keyin bo'lishi mumkin emas")
+    return AnalyticsFilter(start_date=start_date, end_date=end_date,
+                           category_id=category_id, master_id=master_id,
+                           region=region, limit=limit, offset=offset)
 
 
 def _admin_order_detail_out(order: Order, db: Session) -> AdminOrderDetailOut:
@@ -608,6 +633,222 @@ def list_audit_log(
         )
         for entry, admin_name in rows
     ]
+
+
+# ==================== Mobil tayyorgarligi va monitoring ====================
+
+
+@router.get("/masters", response_model=list[AdminMasterItem])
+def list_admin_masters(
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0, le=MAX_DB_INT),
+    region: str | None = Query(default=None, max_length=80),
+    db: Session = Depends(get_db),
+):
+    return admin_analytics.masters_report(
+        db, AnalyticsFilter(limit=limit, offset=offset, region=region)
+    )
+
+
+@router.get("/masters/locations", response_model=list[MasterLocationOut])
+def list_master_locations(
+    limit: int = Query(default=100, ge=1, le=200),
+    offset: int = Query(default=0, ge=0, le=MAX_DB_INT),
+    admin: User = Depends(require_role(Role.ADMIN)),
+    db: Session = Depends(get_db),
+):
+    rows = db.scalars(select(MasterProfile).join(User).where(
+        MasterProfile.location_sharing_enabled.is_(True),
+        MasterProfile.latitude.is_not(None), MasterProfile.longitude.is_not(None),
+    ).order_by(MasterProfile.location_updated_at.desc()).offset(offset).limit(limit)).all()
+    result = [MasterLocationOut(
+        master_id=p.id, full_name=p.user.full_name, latitude=p.latitude,
+        longitude=p.longitude, location_updated_at=p.location_updated_at,
+        is_available=p.is_available,
+    ) for p in rows]
+    admin_ops.log_admin_action(db, admin, "view_master_locations", "master_profile", None, f"count={len(result)}")
+    db.commit()
+    return result
+
+
+@router.get("/masters/{master_id}/statistics", response_model=AdminMasterStats)
+def get_master_statistics(
+    master_id: int = Path(..., le=MAX_DB_INT),
+    admin: User = Depends(require_role(Role.ADMIN)),
+    db: Session = Depends(get_db),
+):
+    items = admin_analytics.masters_report(db, AnalyticsFilter(master_id=master_id, limit=1))
+    if not items:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Usta topilmadi")
+    profile = db.get(MasterProfile, master_id)
+    item = items[0]
+    item["location_sharing_enabled"] = profile.location_sharing_enabled
+    item["location_updated_at"] = profile.location_updated_at
+    return item
+
+
+@router.get("/masters/{master_id}/location", response_model=MasterLocationOut)
+def get_master_location(
+    master_id: int = Path(..., le=MAX_DB_INT),
+    admin: User = Depends(require_role(Role.ADMIN)),
+    db: Session = Depends(get_db),
+):
+    profile = db.get(MasterProfile, master_id)
+    if profile is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Usta topilmadi")
+    if not profile.location_sharing_enabled or profile.latitude is None or profile.longitude is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Usta joylashuvini ulashmagan")
+    admin_ops.log_admin_action(db, admin, "view_master_location", "master_profile", master_id)
+    db.commit()
+    return MasterLocationOut(
+        master_id=profile.id, full_name=profile.user.full_name,
+        latitude=profile.latitude, longitude=profile.longitude,
+        location_updated_at=profile.location_updated_at,
+        is_available=profile.is_available,
+    )
+
+
+@router.get("/settings/commission", response_model=CommissionSettingsOut)
+def get_commission_settings(db: Session = Depends(get_db)):
+    setting = db.get(PlatformSetting, 1)
+    if setting is None:
+        from app.core.config import settings
+        return CommissionSettingsOut(enabled=True, rate=settings.COMMISSION_RATE)
+    return CommissionSettingsOut(enabled=setting.commission_enabled,
+                                  rate=setting.commission_rate, updated_at=setting.updated_at)
+
+
+@router.patch("/settings/commission", response_model=CommissionSettingsOut)
+def update_commission_settings(
+    data: CommissionSettingsIn,
+    admin: User = Depends(require_role(Role.ADMIN)),
+    db: Session = Depends(get_db),
+):
+    setting = db.get(PlatformSetting, 1)
+    if setting is None:
+        setting = PlatformSetting(id=1)
+        db.add(setting)
+    setting.commission_enabled = data.enabled
+    setting.commission_rate = data.rate
+    admin_ops.log_admin_action(db, admin, "update_commission_settings", "platform_settings", 1,
+                               f"enabled={data.enabled};rate={data.rate}")
+    db.commit()
+    db.refresh(setting)
+    return CommissionSettingsOut(enabled=setting.commission_enabled,
+                                 rate=setting.commission_rate, updated_at=setting.updated_at)
+
+
+def _admin_chat_messages(order_id: int, db: Session):
+    order = db.get(Order, order_id)
+    if order is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Chat topilmadi")
+    rows = db.execute(select(OrderMessage, User.full_name).join(User, User.id == OrderMessage.sender_id)
+                      .where(OrderMessage.order_id == order_id).order_by(OrderMessage.id)).all()
+    return order, rows
+
+
+@router.get("/chats")
+def list_admin_chats(
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0, le=MAX_DB_INT),
+    db: Session = Depends(get_db),
+):
+    rows = db.execute(select(Order.id, Order.status, Order.created_at, func.count(OrderMessage.id))
+                      .join(OrderMessage, OrderMessage.order_id == Order.id)
+                      .group_by(Order.id).order_by(Order.id.desc()).offset(offset).limit(limit)).all()
+    return [{"order_id": oid, "status": state, "created_at": created, "message_count": count}
+            for oid, state, created, count in rows]
+
+
+@router.get("/chats/reported", response_model=list[ChatReportOut])
+def list_reported_chats(
+    status_filter: str = Query(default="open", pattern="^(open|resolved|rejected)$", alias="status"),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0, le=MAX_DB_INT),
+    db: Session = Depends(get_db),
+):
+    rows = db.execute(select(ChatReport, OrderMessage.body, User.full_name)
+                      .join(OrderMessage, OrderMessage.id == ChatReport.message_id)
+                      .join(User, User.id == ChatReport.reported_by)
+                      .where(ChatReport.status == status_filter)
+                      .order_by(ChatReport.created_at.desc()).offset(offset).limit(limit)).all()
+    return [ChatReportOut.model_validate({**report.__dict__, "message_body": body,
+                                          "reporter_name": name})
+            for report, body, name in rows]
+
+
+@router.get("/chats/{order_id}/messages")
+def get_admin_chat_messages(
+    order_id: int = Path(..., le=MAX_DB_INT),
+    admin: User = Depends(require_role(Role.ADMIN)),
+    db: Session = Depends(get_db),
+):
+    order, rows = _admin_chat_messages(order_id, db)
+    admin_ops.log_admin_action(db, admin, "view_chat", "order", order_id)
+    db.commit()
+    return [{"id": msg.id, "order_id": msg.order_id, "sender_id": msg.sender_id,
+             "sender_name": name, "body": msg.body, "is_hidden": msg.is_hidden,
+             "created_at": msg.created_at} for msg, name in rows]
+
+
+@router.post("/chats/{order_id}/moderation")
+def moderate_chat_message(
+    data: ChatMessageModerationIn,
+    order_id: int = Path(..., le=MAX_DB_INT),
+    admin: User = Depends(require_role(Role.ADMIN)),
+    db: Session = Depends(get_db),
+):
+    msg = db.scalar(select(OrderMessage).where(OrderMessage.id == data.message_id,
+                                               OrderMessage.order_id == order_id))
+    if msg is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Xabar topilmadi")
+    msg.is_hidden = data.hide
+    for report in db.scalars(select(ChatReport).where(
+        ChatReport.message_id == msg.id, ChatReport.status == "open"
+    )):
+        report.status = "resolved"
+        report.admin_note = data.note
+        report.reviewed_by = admin.id
+        report.reviewed_at = datetime.now(timezone.utc)
+    admin_ops.log_admin_action(db, admin, "moderate_chat_message", "order_message",
+                               msg.id, f"hidden={data.hide};note={data.note or ''}")
+    db.commit()
+    return {"message_id": msg.id, "is_hidden": msg.is_hidden}
+
+
+@router.get("/analytics/overview")
+def analytics_overview(filters: AnalyticsFilter = Depends(_analytics_filter), db: Session = Depends(get_db)):
+    return admin_analytics.order_summary(db, filters)
+
+
+@router.get("/analytics/orders")
+def analytics_orders(filters: AnalyticsFilter = Depends(_analytics_filter), db: Session = Depends(get_db)):
+    return admin_analytics.order_summary(db, filters)
+
+
+@router.get("/analytics/masters", response_model=list[AdminMasterItem])
+def analytics_masters(filters: AnalyticsFilter = Depends(_analytics_filter), db: Session = Depends(get_db)):
+    return admin_analytics.masters_report(db, filters)
+
+
+@router.get("/analytics/revenue")
+def analytics_revenue(filters: AnalyticsFilter = Depends(_analytics_filter), db: Session = Depends(get_db)):
+    return admin_analytics.revenue_report(db, filters)
+
+
+@router.get("/analytics/categories")
+def analytics_categories(filters: AnalyticsFilter = Depends(_analytics_filter), db: Session = Depends(get_db)):
+    return admin_analytics.category_report(db, filters)
+
+
+@router.get("/analytics/geo")
+def analytics_geo(filters: AnalyticsFilter = Depends(_analytics_filter), db: Session = Depends(get_db)):
+    return admin_analytics.geo_report(db, filters)
+
+
+@router.get("/analytics/rejections")
+def analytics_rejections(filters: AnalyticsFilter = Depends(_analytics_filter), db: Session = Depends(get_db)):
+    return admin_analytics.rejection_report(db, filters)
 
 
 # ==================== Statistika ====================

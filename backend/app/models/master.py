@@ -1,7 +1,9 @@
+from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import (
     Boolean,
+    DateTime,
     Float,
     ForeignKey,
     Index,
@@ -42,6 +44,10 @@ class MasterProfile(IdTimestampMixin, Base):
     # Yandex xaritadan belgilangan joylashuv (ixtiyoriy)
     latitude: Mapped[Optional[float]] = mapped_column(Float)
     longitude: Mapped[Optional[float]] = mapped_column(Float)
+    location_sharing_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=false()
+    )
+    location_updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
     user: Mapped["User"] = relationship(back_populates="master_profile")
     services: Mapped[list["MasterService"]] = relationship(

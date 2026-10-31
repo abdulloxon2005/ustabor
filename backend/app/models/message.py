@@ -1,4 +1,4 @@
-from sqlalchemy import ForeignKey, Text
+from sqlalchemy import Boolean, ForeignKey, Text, false
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, IdTimestampMixin
@@ -16,5 +16,6 @@ class OrderMessage(IdTimestampMixin, Base):
     order_id: Mapped[int] = mapped_column(ForeignKey("orders.id", ondelete="CASCADE"))
     sender_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     body: Mapped[str] = mapped_column(Text)
+    is_hidden: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
 
     order: Mapped["Order"] = relationship(back_populates="messages")

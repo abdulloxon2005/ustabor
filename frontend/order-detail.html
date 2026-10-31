@@ -79,6 +79,17 @@
     </div>
   </main>
 
+  <!-- Baholash modali: ish yakunlangach avtomatik ochiladi -->
+  <div id="reviewModal" class="modal-overlay" style="display: none;">
+    <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="reviewModalTitle">
+      <div class="card-row" style="margin-bottom: 8px;">
+        <h2 id="reviewModalTitle" style="margin: 0; font-size: 1.15rem;">Ish yakunlandi!</h2>
+        <button id="reviewModalCloseBtn" class="btn btn-outline" type="button" aria-label="Yopish">Yopish</button>
+      </div>
+      <div id="reviewModalBody"></div>
+    </div>
+  </div>
+
   <nav class="bottom-nav"></nav>
 
   <script src="js/api.js"></script>
@@ -119,6 +130,21 @@
       const cancelBtn = document.getElementById("cancelBtn");
       const timelineListEl = document.getElementById("timelineList");
       const reviewSectionEl = document.getElementById("reviewSection");
+      const reviewModalEl = document.getElementById("reviewModal");
+      const reviewModalBodyEl = document.getElementById("reviewModalBody");
+      const reviewModalCloseBtn = document.getElementById("reviewModalCloseBtn");
+      let reviewModalAutoShown = false;
+
+      function openReviewModal() {
+        reviewModalEl.style.display = "flex";
+      }
+      function closeReviewModal() {
+        reviewModalEl.style.display = "none";
+      }
+      reviewModalCloseBtn.addEventListener("click", closeReviewModal);
+      reviewModalEl.addEventListener("click", (e) => {
+        if (e.target === reviewModalEl) closeReviewModal();
+      });
 
       const CANCELLABLE = new Set(["searching", "assigned"]);
       const MAX_ORDER_PHOTOS = 5;
@@ -327,10 +353,128 @@
         }
       }
 
+      function buildReviewForm(order) {
+        const form = document.createElement("form");
+        form.className = "card";
+        form.noValidate = true;
+
+        const title = document.createElement("h2");
+        title.style.marginTop = "0";
+        title.textContent = "Xizmat haqida sharh qoldiring";
+
+        // minValue=1: umumiy baho (doim tanlangan); minValue=0: ixtiyoriy sub-baho
+        function makeStarPicker(initial, minValue) {
+          const container = document.createElement("div");
+          container.className = "star-rating";
+          container.setAttribute("role", "radiogroup");
+
+          let value = initial;
+          const starEls = [];
+
+          function update(val) {
+            value = val;
+            starEls.forEach((s, idx) => {
+              const isSelected = idx < val;
+              s.classList.toggle("active", isSelected);
+              s.setAttribute("aria-pressed", String(idx + 1 === val));
+            });
+          }
+
+          for (let i = 1; i <= 5; i++) {
+            const s = document.createElement("button");
+            s.type = "button";
+            s.textContent = "★";
+            s.setAttribute("aria-label", i + " yulduz");
+            s.addEventListener("click", () => update(i));
+            starEls.push(s);
+            container.appendChild(s);
+          }
+          update(initial);
+
+          return { container, getValue: () => (value === 0 ? null : value) };
+        }
+
+        const starPicker = makeStarPicker(5, 1);
+        const starContainer = starPicker.container;
+
+        const subPickersWrap = document.createElement("div");
+        subPickersWrap.style.margin = "12px 0";
+        subPickersWrap.style.display = "grid";
+        subPickersWrap.style.gap = "8px";
+
+        const subPickerDefs = [
+          ["quality_rating", "Sifat (ixtiyoriy)"],
+          ["timeliness_rating", "Vaqtida kelish (ixtiyoriy)"],
+          ["price_rating", "Narx adolati (ixtiyoriy)"],
+        ];
+        const subPickers = {};
+        subPickerDefs.forEach(([key, labelText]) => {
+          const row = document.createElement("div");
+          const lbl = document.createElement("div");
+          lbl.className = "muted";
+          lbl.style.fontSize = "0.85rem";
+          lbl.style.marginBottom = "2px";
+          lbl.textContent = labelText;
+          const picker = makeStarPicker(0, 0);
+          row.append(lbl, picker.container);
+          subPickersWrap.appendChild(row);
+          subPickers[key] = picker;
+        });
+
+        const label = document.createElement("label");
+        label.setAttribute("for", "commentInput");
+        label.textContent = "Sharh (ixtiyoriy):";
+
+        const textarea = document.createElement("textarea");
+        textarea.id = "commentInput";
+        textarea.placeholder = "Usta ishi, sifati va muomalasi haqida fikringiz...";
+        textarea.maxLength = 1000;
+
+        const errEl = document.createElement("div");
+        errEl.className = "form-error";
+        errEl.setAttribute("role", "alert");
+
+        const submitBtn = document.createElement("button");
+        submitBtn.type = "submit";
+        submitBtn.className = "btn btn-block btn-accent";
+        submitBtn.style.marginTop = "12px";
+        submitBtn.textContent = "Sharh yuborish";
+
+        form.addEventListener("submit", async (e) => {
+          e.preventDefault();
+          errEl.textContent = "";
+          submitBtn.disabled = true;
+          submitBtn.textContent = "Yuborilmoqda...";
+
+          try {
+            await apiFetch("/orders/" + order.id + "/review", {
+              method: "POST",
+              body: JSON.stringify({
+                rating: starPicker.getValue(),
+                comment: textarea.value.trim() || null,
+                quality_rating: subPickers.quality_rating.getValue(),
+                timeliness_rating: subPickers.timeliness_rating.getValue(),
+                price_rating: subPickers.price_rating.getValue(),
+              }),
+            });
+            closeReviewModal();
+            loadOrder();
+          } catch (err) {
+            errEl.textContent = err.message;
+            submitBtn.disabled = false;
+            submitBtn.textContent = "Sharh yuborish";
+          }
+        });
+
+        form.append(title, starContainer, subPickersWrap, label, textarea, errEl, submitBtn);
+        return form;
+      }
+
       function renderReviewBlock(order) {
         reviewSectionEl.replaceChildren();
 
         if (order.review) {
+          closeReviewModal();
           const card = document.createElement("div");
           card.className = "card review-box";
 
@@ -385,119 +529,31 @@
         }
 
         if (order.can_review) {
-          const form = document.createElement("form");
-          form.className = "card";
-          form.noValidate = true;
+          // Forma modal ichiga joylanadi (ish yakunlanganda avtomatik ochiladi);
+          // sahifada esa kichik eslatma + uni qayta ochish tugmasi qoladi.
+          reviewModalBodyEl.replaceChildren(buildReviewForm(order));
 
-          const title = document.createElement("h2");
-          title.style.marginTop = "0";
-          title.textContent = "Xizmat haqida sharh qoldiring";
+          const prompt = document.createElement("div");
+          prompt.className = "card";
+          prompt.style.textAlign = "center";
+          const promptText = document.createElement("p");
+          promptText.style.margin = "0 0 10px";
+          promptText.style.fontWeight = "600";
+          promptText.textContent = "Ish yakunlandi — ustani baholang";
+          const promptBtn = document.createElement("button");
+          promptBtn.type = "button";
+          promptBtn.className = "btn btn-accent btn-block";
+          promptBtn.textContent = "Ustani baholash";
+          promptBtn.addEventListener("click", openReviewModal);
+          prompt.append(promptText, promptBtn);
+          reviewSectionEl.appendChild(prompt);
 
-          // minValue=1: umumiy baho (doim tanlangan); minValue=0: ixtiyoriy sub-baho
-          function makeStarPicker(initial, minValue) {
-            const container = document.createElement("div");
-            container.className = "star-rating";
-            container.setAttribute("role", "radiogroup");
-
-            let value = initial;
-            const starEls = [];
-
-            function update(val) {
-              value = val;
-              starEls.forEach((s, idx) => {
-                const isSelected = idx < val;
-                s.classList.toggle("active", isSelected);
-                s.setAttribute("aria-pressed", String(idx + 1 === val));
-              });
-            }
-
-            for (let i = 1; i <= 5; i++) {
-              const s = document.createElement("button");
-              s.type = "button";
-              s.textContent = "★";
-              s.setAttribute("aria-label", i + " yulduz");
-              s.addEventListener("click", () => update(i));
-              starEls.push(s);
-              container.appendChild(s);
-            }
-            update(initial);
-
-            return { container, getValue: () => (value === 0 ? null : value) };
+          if (!reviewModalAutoShown) {
+            reviewModalAutoShown = true;
+            openReviewModal();
           }
-
-          const starPicker = makeStarPicker(5, 1);
-          const starContainer = starPicker.container;
-
-          const subPickersWrap = document.createElement("div");
-          subPickersWrap.style.margin = "12px 0";
-          subPickersWrap.style.display = "grid";
-          subPickersWrap.style.gap = "8px";
-
-          const subPickerDefs = [
-            ["quality_rating", "Sifat (ixtiyoriy)"],
-            ["timeliness_rating", "Vaqtida kelish (ixtiyoriy)"],
-            ["price_rating", "Narx adolati (ixtiyoriy)"],
-          ];
-          const subPickers = {};
-          subPickerDefs.forEach(([key, labelText]) => {
-            const row = document.createElement("div");
-            const lbl = document.createElement("div");
-            lbl.className = "muted";
-            lbl.style.fontSize = "0.85rem";
-            lbl.style.marginBottom = "2px";
-            lbl.textContent = labelText;
-            const picker = makeStarPicker(0, 0);
-            row.append(lbl, picker.container);
-            subPickersWrap.appendChild(row);
-            subPickers[key] = picker;
-          });
-
-          const label = document.createElement("label");
-          label.setAttribute("for", "commentInput");
-          label.textContent = "Sharh (ixtiyoriy):";
-
-          const textarea = document.createElement("textarea");
-          textarea.id = "commentInput";
-          textarea.placeholder = "Usta ishi, sifati va muomalasi haqida fikringiz...";
-          textarea.maxLength = 1000;
-
-          const errEl = document.createElement("div");
-          errEl.className = "form-error";
-          errEl.setAttribute("role", "alert");
-
-          const submitBtn = document.createElement("button");
-          submitBtn.type = "submit";
-          submitBtn.className = "btn btn-block btn-accent";
-          submitBtn.style.marginTop = "12px";
-          submitBtn.textContent = "Sharh yuborish";
-
-          form.addEventListener("submit", async (e) => {
-            e.preventDefault();
-            errEl.textContent = "";
-            submitBtn.disabled = true;
-            submitBtn.textContent = "Yuborilmoqda...";
-
-            try {
-              await apiFetch("/orders/" + order.id + "/review", {
-                method: "POST",
-                body: JSON.stringify({
-                  rating: starPicker.getValue(),
-                  comment: textarea.value.trim() || null,
-                  quality_rating: subPickers.quality_rating.getValue(),
-                  timeliness_rating: subPickers.timeliness_rating.getValue(),
-                  price_rating: subPickers.price_rating.getValue(),
-                }),
-              });
-              loadOrder();
-            } catch (err) {
-              errEl.textContent = err.message;
-              submitBtn.disabled = false;
-              submitBtn.textContent = "Sharh yuborish";
-            }
-          });
-
-          form.append(title, starContainer, subPickersWrap, label, textarea, errEl, submitBtn);
-          reviewSectionEl.appendChild(form);
+        } else {
+          closeReviewModal();
         }
       }
 

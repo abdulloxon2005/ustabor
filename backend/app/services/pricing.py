@@ -9,7 +9,7 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.models import MasterProfile, MasterService, Order, Payment, Quote, User
+from app.models import MasterProfile, MasterService, Order, Payment, PlatformSetting, Quote, User
 from app.models.enums import (
     OrderStatus,
     PaymentMethod,
@@ -25,6 +25,13 @@ PRICE_ALREADY_CONFIRMED_OR_CHANGED = (
 )
 PRICE_REQUIRED = "Avval narx tasdiqlanishi kerak"
 FORBIDDEN = "Bu amal uchun ruxsat yo'q"
+
+
+def current_commission_rate(db: Session) -> int:
+    setting = db.get(PlatformSetting, 1)
+    if setting is not None:
+        return setting.commission_rate if setting.commission_enabled else 0
+    return settings.COMMISSION_RATE
 
 
 def compute_commission(agreed_price: int, commission_rate: int) -> int:

@@ -62,6 +62,11 @@ class Settings(BaseSettings):
     # shuning uchun Yandex konsolida HTTP-referrer bilan cheklash kerak).
     YANDEX_MAPS_JS_API_KEY: str = ""
 
+    # Firebase HTTP v1. Access token must be injected by a secret manager and
+    # rotated by the deployment; when omitted push delivery stays disabled.
+    FCM_PROJECT_ID: str = ""
+    FCM_ACCESS_TOKEN: str = ""
+
     @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]

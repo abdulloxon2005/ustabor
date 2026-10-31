@@ -45,6 +45,7 @@ class Order(IdTimestampMixin, Base):
         Integer, default=lambda: settings.COMMISSION_RATE, server_default="10"
     )
     commission_amount: Mapped[Optional[int]] = mapped_column(Integer)
+    dispatch_radius_km: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
     customer: Mapped["User"] = relationship()
     category: Mapped["Category"] = relationship()

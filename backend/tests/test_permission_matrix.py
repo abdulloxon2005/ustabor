@@ -36,6 +36,7 @@ PERMISSION_TABLE: dict[tuple[str, str], str | set[str]] = {
     ("GET", "/api/v1/masters"): "public",
     ("GET", "/api/v1/masters/{master_id}"): "public",
     ("GET", "/api/v1/masters/{master_id}/reviews"): "public",
+    ("GET", "/api/v1/masters/nearby"): {"customer", "admin"},
     ("GET", "/api/v1/geo/config"): "public",
     # Authenticated (all active roles)
     ("GET", "/api/v1/auth/me"): {"customer", "master", "admin"},
@@ -57,6 +58,8 @@ PERMISSION_TABLE: dict[tuple[str, str], str | set[str]] = {
     ("DELETE", "/api/v1/masters/me/photos/{photo_id}"): {"master"},
     ("GET", "/api/v1/masters/me/schedule"): {"master"},
     ("PUT", "/api/v1/masters/me/schedule"): {"master"},
+    ("POST", "/api/v1/masters/me/location"): {"master"},
+    ("POST", "/api/v1/masters/me/device-token"): {"master"},
     ("GET", "/api/v1/masters/favorites"): {"customer"},
     ("POST", "/api/v1/masters/{master_id}/favorite"): {"customer"},
     ("DELETE", "/api/v1/masters/{master_id}/favorite"): {"customer"},
@@ -64,6 +67,8 @@ PERMISSION_TABLE: dict[tuple[str, str], str | set[str]] = {
     ("POST", "/api/v1/orders"): {"customer"},
     ("GET", "/api/v1/orders"): {"customer"},
     ("GET", "/api/v1/orders/{order_id}"): {"customer"},
+    ("POST", "/api/v1/orders/{order_id}/dispatch"): {"customer"},
+    ("GET", "/api/v1/orders/{order_id}/dispatch-status"): {"customer", "master", "admin"},
     ("POST", "/api/v1/orders/{order_id}/cancel"): {"customer"},
     ("POST", "/api/v1/orders/{order_id}/select-master"): {"customer"},
     ("POST", "/api/v1/orders/{order_id}/quotes/{quote_id}/accept"): {"customer"},
@@ -73,6 +78,7 @@ PERMISSION_TABLE: dict[tuple[str, str], str | set[str]] = {
     ("DELETE", "/api/v1/orders/{order_id}/photos/{photo_id}"): {"customer"},
     ("GET", "/api/v1/orders/{order_id}/messages"): {"customer", "master", "admin"},
     ("POST", "/api/v1/orders/{order_id}/messages"): {"customer", "master"},
+    ("POST", "/api/v1/orders/{order_id}/messages/{message_id}/report"): {"customer", "master"},
     ("GET", "/api/v1/orders/{order_id}/disputes"): {"customer", "master", "admin"},
     ("POST", "/api/v1/orders/{order_id}/dispute"): {"customer", "master"},
     # Master order action routes
@@ -96,6 +102,23 @@ PERMISSION_TABLE: dict[tuple[str, str], str | set[str]] = {
     ("PATCH", "/api/v1/admin/disputes/{dispute_id}"): {"admin"},
     ("GET", "/api/v1/admin/audit-log"): {"admin"},
     ("GET", "/api/v1/admin/analytics"): {"admin"},
+    ("GET", "/api/v1/admin/masters"): {"admin"},
+    ("GET", "/api/v1/admin/masters/locations"): {"admin"},
+    ("GET", "/api/v1/admin/masters/{master_id}/statistics"): {"admin"},
+    ("GET", "/api/v1/admin/masters/{master_id}/location"): {"admin"},
+    ("GET", "/api/v1/admin/settings/commission"): {"admin"},
+    ("PATCH", "/api/v1/admin/settings/commission"): {"admin"},
+    ("GET", "/api/v1/admin/chats"): {"admin"},
+    ("GET", "/api/v1/admin/chats/reported"): {"admin"},
+    ("GET", "/api/v1/admin/chats/{order_id}/messages"): {"admin"},
+    ("POST", "/api/v1/admin/chats/{order_id}/moderation"): {"admin"},
+    ("GET", "/api/v1/admin/analytics/overview"): {"admin"},
+    ("GET", "/api/v1/admin/analytics/orders"): {"admin"},
+    ("GET", "/api/v1/admin/analytics/masters"): {"admin"},
+    ("GET", "/api/v1/admin/analytics/revenue"): {"admin"},
+    ("GET", "/api/v1/admin/analytics/categories"): {"admin"},
+    ("GET", "/api/v1/admin/analytics/geo"): {"admin"},
+    ("GET", "/api/v1/admin/analytics/rejections"): {"admin"},
 }
 
 
@@ -243,6 +266,7 @@ def _render_request(
         .replace("{profile_id}", str(env["master_profile_id"]))
         .replace("{order_id}", str(env["order_id"]))
         .replace("{quote_id}", str(env["quote_id"]))
+        .replace("{message_id}", "1")
         .replace("{category_id}", str(env["cat_id"]))
         .replace("{user_id}", str(env["customer_id"]))
     )
@@ -282,6 +306,12 @@ def _render_request(
         ("PATCH", "/api/v1/masters/me/availability"): {
             "is_available": True,
         },
+        ("POST", "/api/v1/masters/me/location"): {
+            "sharing_enabled": True, "latitude": 41.3, "longitude": 69.2,
+        },
+        ("POST", "/api/v1/masters/me/device-token"): {
+            "token": "t" * 80, "platform": "android",
+        },
         ("PUT", "/api/v1/masters/me/schedule"): [
             {"weekday": 0, "is_working": True, "start_time": "09:00", "end_time": "18:00"},
         ],
@@ -306,6 +336,15 @@ def _render_request(
         },
         ("POST", "/api/v1/orders/{order_id}/messages"): {
             "body": "Qachon kelasiz?",
+        },
+        ("POST", "/api/v1/orders/{order_id}/messages/{message_id}/report"): {
+            "reason": "Nomaqbul xabar matni",
+        },
+        ("POST", "/api/v1/admin/chats/{order_id}/moderation"): {
+            "message_id": 1, "hide": True, "note": "Tekshirildi",
+        },
+        ("PATCH", "/api/v1/admin/settings/commission"): {
+            "enabled": True, "rate": 10,
         },
         ("POST", "/api/v1/orders/{order_id}/dispute"): {
             "reason": "Usta vaqtida kelmadi",

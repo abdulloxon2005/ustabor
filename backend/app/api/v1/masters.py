@@ -6,7 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from app.api.deps import require_role
-from app.core.config import MAX_DB_INT
+from app.core.config import MAX_DB_INT, settings
 from app.db.session import get_db
 from app.models import Category, Favorite, MasterAvailability, MasterPhoto, MasterProfile, MasterService, Order, OrderOffer, Review, User
 from app.models.enums import OfferStatus, OrderStatus, PricingType, QuoteStatus, Role
@@ -26,10 +26,13 @@ from app.schemas.master import (
     ServiceIn,
     ServiceOut,
 )
+from app.schemas.mobile import DeviceTokenIn, LocationUpdate, NearbyMaster
 from app.schemas.photo import PhotoOut
 from app.schemas.quote import QuoteOut
 from app.schemas.review import MasterReviewItem, MasterReviewsOut
 from app.services import matching, storage
+from app.models import DeviceToken
+from app.services.geo import haversine_km
 
 router = APIRouter(prefix="/masters", tags=["masters"])
 
@@ -78,8 +81,9 @@ def _public(profile: MasterProfile) -> MasterPublicOut:
         bio=profile.bio,
         city=profile.city,
         district=profile.district,
-        latitude=profile.latitude,
-        longitude=profile.longitude,
+        # Exact live location is private; the nearby API returns distance only.
+        latitude=None,
+        longitude=None,
         is_available=profile.is_available,
         rating_avg=profile.rating_avg,
         rating_count=profile.rating_count,
@@ -93,11 +97,16 @@ def _public(profile: MasterProfile) -> MasterPublicOut:
 
 
 def _me(profile: MasterProfile) -> MasterMeOut:
-    return MasterMeOut(
-        **_public(profile).model_dump(exclude={"services"}),
+    payload = _public(profile).model_dump(exclude={"services"})
+    payload.update(
         services=_services_out(profile, only_active=False),
         is_approved=profile.is_approved,
+        latitude=profile.latitude,
+        longitude=profile.longitude,
+        location_sharing_enabled=profile.location_sharing_enabled,
+        location_updated_at=profile.location_updated_at,
     )
+    return MasterMeOut(**payload)
 
 
 def _own_profile(db: Session, user: User) -> MasterProfile:
@@ -155,6 +164,10 @@ def update_my_profile(
     profile = _own_profile(db, user)
     for field in data.model_fields_set:
         setattr(profile, field, getattr(data, field))
+    if {"latitude", "longitude"} & data.model_fields_set:
+        if not profile.location_sharing_enabled or not profile.is_available:
+            raise HTTPException(status.HTTP_409_CONFLICT, "Joylashuv uchun sharing ruxsati va faol mavjudlik kerak")
+        profile.location_updated_at = datetime.now(timezone.utc)
     db.commit()
     return _me(_own_profile(db, user))
 
@@ -207,8 +220,55 @@ def set_availability(
 ):
     profile = _own_profile(db, user)
     profile.is_available = data.is_available
+    if not data.is_available:
+        profile.location_sharing_enabled = False
+        profile.latitude = None
+        profile.longitude = None
+        profile.location_updated_at = None
     db.commit()
     return _me(_own_profile(db, user))
+
+
+@router.post("/me/location", response_model=MasterMeOut)
+def update_my_location(
+    data: LocationUpdate,
+    user: User = Depends(require_role(Role.MASTER)),
+    db: Session = Depends(get_db),
+):
+    profile = _own_profile(db, user)
+    if data.sharing_enabled and not profile.is_available:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Joylashuvni faqat faol usta ulasha oladi")
+    profile.location_sharing_enabled = data.sharing_enabled
+    if data.sharing_enabled:
+        profile.latitude = data.latitude
+        profile.longitude = data.longitude
+        profile.location_updated_at = datetime.now(timezone.utc)
+    else:
+        profile.latitude = None
+        profile.longitude = None
+        profile.location_updated_at = None
+    db.commit()
+    return _me(_own_profile(db, user))
+
+
+@router.post("/me/device-token", status_code=status.HTTP_200_OK)
+def register_device_token(
+    data: DeviceTokenIn,
+    user: User = Depends(require_role(Role.MASTER)),
+    db: Session = Depends(get_db),
+):
+    row = db.scalar(select(DeviceToken).where(DeviceToken.token == data.token))
+    if row is not None and row.user_id != user.id:
+        row.user_id = user.id
+    if row is None:
+        row = DeviceToken(user_id=user.id, token=data.token, platform=data.platform, is_active=data.is_active)
+        db.add(row)
+    else:
+        row.platform = data.platform
+        row.is_active = data.is_active
+        row.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    return {"registered": True, "push_enabled": bool(settings.FCM_PROJECT_ID and settings.FCM_ACCESS_TOKEN)}
 
 
 # ---------- Haftalik ish jadvali (faqat ko'rsatish uchun) ----------
@@ -557,6 +617,40 @@ def list_masters(
         term = f"%{q.strip().lower()}%"
         stmt = stmt.where(func.lower(User.full_name).like(term))
     return [_public(p) for p in db.scalars(stmt).all()]
+
+
+@router.get("/nearby", response_model=list[NearbyMaster])
+def nearby_masters(
+    latitude: float = Query(..., ge=-90, le=90),
+    longitude: float = Query(..., ge=-180, le=180),
+    radius_km: float = Query(default=25, gt=0, le=500),
+    user: User = Depends(require_role(Role.CUSTOMER, Role.ADMIN)),
+    db: Session = Depends(get_db),
+):
+    profiles = db.scalars(
+        select(MasterProfile)
+        .join(User, User.id == MasterProfile.user_id)
+        .where(
+            MasterProfile.is_approved.is_(True),
+            MasterProfile.is_available.is_(True),
+            MasterProfile.location_sharing_enabled.is_(True),
+            MasterProfile.latitude.is_not(None),
+            MasterProfile.longitude.is_not(None),
+            User.is_active.is_(True),
+        )
+        .options(selectinload(MasterProfile.user))
+    ).all()
+    results = []
+    for profile in profiles:
+        distance = haversine_km(latitude, longitude, profile.latitude, profile.longitude)
+        if distance <= radius_km:
+            results.append(NearbyMaster(
+                id=profile.id, full_name=profile.user.full_name,
+                city=profile.city, district=profile.district,
+                rating_avg=profile.rating_avg, rating_count=profile.rating_count,
+                distance_km=round(distance, 2),
+            ))
+    return sorted(results, key=lambda item: (item.distance_km or 0, item.id))
 
 
 @router.get("/{master_id}", response_model=MasterPublicOut)

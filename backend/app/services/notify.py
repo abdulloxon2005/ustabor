@@ -4,10 +4,14 @@ COMMIT QILMAYDI — chaqiruvchi funksiya/endpoint o'z amali bilan birga commit q
 (order_flow/pricing/matching qoidasi bilan bir xil).
 """
 
+import logging
+
 from sqlalchemy.orm import Session
 
-from app.models import Notification, User
-from app.services import sms
+from app.models import DeviceToken, Notification, User
+from app.services import push, sms
+
+logger = logging.getLogger("notifications")
 
 
 def notify_user(
@@ -31,5 +35,16 @@ def notify_user(
     user = db.get(User, user_id)
     if user is not None and user.phone:
         sms.send_sms(user.phone, f"{title}: {body}")
+
+    if user is not None:
+        tokens = db.query(DeviceToken).filter(
+            DeviceToken.user_id == user_id, DeviceToken.is_active.is_(True)
+        ).all()
+        for device in tokens:
+            try:
+                push.send_push(device.token, title, body, {"type": type, "order_id": order_id or ""})
+            except Exception:
+                # Push is best-effort and must never roll back the core action.
+                logger.exception("Push delivery adapter failed")
 
     return notification

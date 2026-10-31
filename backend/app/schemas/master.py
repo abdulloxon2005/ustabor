@@ -175,6 +175,8 @@ class MasterPublicOut(BaseModel):
 
 class MasterMeOut(MasterPublicOut):
     is_approved: bool
+    location_sharing_enabled: bool = False
+    location_updated_at: datetime | None = None
 
 
 class ApprovalOut(BaseModel):

@@ -252,9 +252,11 @@ def test_score_master_closer_master_scores_higher(db):
 
     near_user = _user(db, "+998901240013", full_name="Yaqin Usta")
     near_master = _master(db, near_user, latitude=41.3150, longitude=69.2450)  # ~0.6 km
+    near_master.location_sharing_enabled = True
 
     far_user = _user(db, "+998901240014", full_name="Uzoq Usta")
     far_master = _master(db, far_user, latitude=41.5000, longitude=69.5000)  # ~25+ km
+    far_master.location_sharing_enabled = True
 
     score_near = matching.score_master(near_master, order, global_avg=4.0)
     score_far = matching.score_master(far_master, order, global_avg=4.0)
