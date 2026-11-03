@@ -44,6 +44,25 @@ function formatPaymentStatus(status) {
   return PAYMENT_STATUS_LABELS[status] || status || "To'langan";
 }
 
+// ===== Google Fonts Material Symbols yordamchilari =====
+function createIcon(name, extraClass) {
+  const span = document.createElement("span");
+  span.className = "material-symbols-outlined" + (extraClass ? " " + extraClass : "");
+  span.setAttribute("aria-hidden", "true");
+  span.textContent = name;
+  return span;
+}
+
+function categoryIconName(cat) {
+  const slug = ((cat && cat.slug) || (cat && cat.name) || String(cat || "")).toLowerCase();
+  if (slug.includes("santex")) return "plumbing";
+  if (slug.includes("elektr")) return "electrical_services";
+  if (slug.includes("konditsioner") || slug.includes("sovut")) return "ac_unit";
+  if (slug.includes("maishiy") || slug.includes("texnika")) return "kitchen";
+  if (slug.includes("tamir") || slug.includes("ta'mir") || slug.includes("quril")) return "construction";
+  return "handyman";
+}
+
 // Backend vaqtni UTC'da, lekin ko'pincha "Z"/ofset BELGISIZ qaytaradi
 // (masalan "2026-10-29T16:15:46"). Brauzer bunday satrni LOKAL vaqt deb
 // o'qiydi — bu xato. Agar oxirida aniq zona belgisi bo'lmasa, "Z" qo'shib
@@ -279,31 +298,33 @@ function renderNav(activeKey) {
 
   if (user && user.role === "master") {
     items = [
-      { key: "dashboard", href: "master-dashboard.html", icon: "📋", label: "Takliflar" },
-      { key: "notifications", href: "notifications.html", icon: "🔔", label: "Bildirishnoma", badge: true },
-      { key: "profile", href: "master-profile.html", icon: "👤", label: "Profil" },
-      { key: "logout", href: "login.html", icon: "🚪", label: "Chiqish", onClick: logout },
+      { key: "dashboard", href: "master-dashboard.html", icon: "assignment", label: "Takliflar" },
+      { key: "complaints", href: "complaints.html", icon: "report_problem", label: "Shikoyatlar" },
+      { key: "notifications", href: "notifications.html", icon: "notifications", label: "Bildirishnoma", badge: true },
+      { key: "profile", href: "master-profile.html", icon: "person", label: "Profil" },
+      { key: "logout", href: "login.html", icon: "logout", label: "Chiqish", onClick: logout },
     ];
   } else if (user && user.role === "customer") {
     items = [
-      { key: "home", href: "index.html", icon: "🏠", label: "Asosiy" },
-      { key: "masters", href: "masters.html", icon: "🧑‍🔧", label: "Ustalar" },
-      { key: "orders", href: "my-orders.html", icon: "📋", label: "Buyurtmalar" },
-      { key: "notifications", href: "notifications.html", icon: "🔔", label: "Bildirishnoma", badge: true },
-      { key: "profile", href: "profile.html", icon: "👤", label: "Profil" },
+      { key: "home", href: "index.html", icon: "home", label: "Asosiy" },
+      { key: "masters", href: "masters.html", icon: "engineering", label: "Ustalar" },
+      { key: "orders", href: "my-orders.html", icon: "receipt_long", label: "Buyurtmalar" },
+      { key: "complaints", href: "complaints.html", icon: "report_problem", label: "Shikoyatlar" },
+      { key: "notifications", href: "notifications.html", icon: "notifications", label: "Bildirishnoma", badge: true },
+      { key: "profile", href: "profile.html", icon: "person", label: "Profil" },
     ];
   } else if (user && user.role === "admin") {
     items = [
-      { key: "home", href: "index.html", icon: "🏠", label: "Asosiy" },
-      { key: "notifications", href: "notifications.html", icon: "🔔", label: "Bildirishnoma", badge: true },
-      { key: "admin", href: "admin.html", icon: "⚙️", label: "Admin" },
-      { key: "logout", href: "login.html", icon: "🚪", label: "Chiqish", onClick: logout },
+      { key: "home", href: "index.html", icon: "home", label: "Asosiy" },
+      { key: "notifications", href: "notifications.html", icon: "notifications", label: "Bildirishnoma", badge: true },
+      { key: "admin", href: "admin.html", icon: "admin_panel_settings", label: "Admin" },
+      { key: "logout", href: "login.html", icon: "logout", label: "Chiqish", onClick: logout },
     ];
   } else {
     items = [
-      { key: "home", href: "index.html", icon: "🏠", label: "Asosiy" },
-      { key: "login", href: "login.html", icon: "🔑", label: "Kirish" },
-      { key: "register", href: "register.html", icon: "📝", label: "Ro'yxatdan o'tish" },
+      { key: "home", href: "index.html", icon: "home", label: "Asosiy" },
+      { key: "login", href: "login.html", icon: "login", label: "Kirish" },
+      { key: "register", href: "register.html", icon: "person_add", label: "Ro'yxatdan o'tish" },
     ];
   }
 
@@ -316,7 +337,7 @@ function renderNav(activeKey) {
     const iconSpan = document.createElement("span");
     iconSpan.className = "icon";
     iconSpan.style.position = "relative";
-    iconSpan.textContent = item.icon;
+    iconSpan.appendChild(createIcon(item.icon));
 
     if (item.badge) {
       const badgeSpan = document.createElement("span");

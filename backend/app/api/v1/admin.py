@@ -537,21 +537,24 @@ def get_commissions_report(
 @router.get("/disputes", response_model=list[AdminDisputeListItem])
 def list_disputes(
     status_filter: DisputeStatus | None = Query(default=None, alias="status"),
-    limit: int = 20,
+    role_filter: Role | None = Query(default=None, alias="role"),
+    limit: int = 50,
     offset: int = Query(default=0, le=MAX_DB_INT),
     db: Session = Depends(get_db),
 ):
     limit, offset = _clamp_pagination(limit, offset)
 
     stmt = (
-        select(Dispute, User.full_name, User.role, Order.status, Category.name)
+        select(Dispute, User.full_name, User.phone, User.role, Order.status, Category.name)
         .join(User, Dispute.raised_by == User.id)
-        .join(Order, Dispute.order_id == Order.id)
-        .join(Category, Order.category_id == Category.id)
+        .outerjoin(Order, Dispute.order_id == Order.id)
+        .outerjoin(Category, Order.category_id == Category.id)
         .order_by(Dispute.created_at.desc(), Dispute.id.desc())
     )
     if status_filter is not None:
         stmt = stmt.where(Dispute.status == status_filter)
+    if role_filter is not None:
+        stmt = stmt.where(User.role == role_filter)
 
     rows = db.execute(stmt.offset(offset).limit(limit)).all()
     return [
@@ -562,13 +565,18 @@ def list_disputes(
             reason=d.reason,
             admin_note=d.admin_note,
             raised_by_name=full_name,
+            raised_by_phone=phone,
             raised_by_role=role.value if hasattr(role, "value") else str(role),
-            category_name=cat_name,
-            order_status=order_status.value if hasattr(order_status, "value") else str(order_status),
+            category_name=cat_name or "Umumiy shikoyat",
+            order_status=(
+                order_status.value
+                if hasattr(order_status, "value")
+                else (str(order_status) if order_status else "—")
+            ),
             created_at=d.created_at,
             resolved_at=d.resolved_at,
         )
-        for d, full_name, role, order_status, cat_name in rows
+        for d, full_name, phone, role, order_status, cat_name in rows
     ]
 
 
@@ -590,6 +598,17 @@ def resolve_dispute(
     dispute.resolved_at = datetime.now(timezone.utc)
     admin_ops.log_admin_action(
         db, admin, "resolve_dispute", "dispute", dispute_id, data.status
+    )
+    status_label = "hal qilindi" if dispute.status == DisputeStatus.RESOLVED else "rad etildi"
+    note_part = f". Admin izohi: {dispute.admin_note}" if dispute.admin_note else ""
+    order_part = f"#{dispute.order_id} buyurtma bo'yicha s" if dispute.order_id else "S"
+    notify.notify_user(
+        db,
+        dispute.raised_by,
+        "dispute_resolved",
+        f"Shikoyatingiz {status_label}",
+        f"{order_part}hikoyatingiz admin tomonidan {status_label}{note_part}",
+        order_id=dispute.order_id,
     )
     db.commit()
     db.refresh(dispute)

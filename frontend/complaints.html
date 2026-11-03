@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#2563eb" />
+  <title>Shikoyatlar - UstaBor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <header class="app-header">
+    <a id="brandLink" class="brand" href="index.html"><span class="material-symbols-outlined" aria-hidden="true">handyman</span>UstaBor</a>
+    <a id="backBtn" class="btn btn-outline" href="index.html"><span class="material-symbols-outlined icon-sm" aria-hidden="true">arrow_back</span>Orqaga</a>
+  </header>
+
+  <main class="container">
+    <h1>Shikoyatlar</h1>
+    <p class="muted" style="margin-top: -6px; margin-bottom: 16px;">
+      Buyurtma yoki xizmat bo'yicha muammo bo'lsa, adminga shikoyat yuboring. Admin uni ko'rib chiqib javob qoldiradi.
+    </p>
+
+    <!-- Yangi shikoyat yuborish formasi -->
+    <form id="complaintForm" class="card" style="margin-bottom: 20px;" novalidate>
+      <h2 style="margin-top: 0; display: flex; align-items: center; gap: 6px;">
+        <span class="material-symbols-outlined" aria-hidden="true" style="color: var(--err);">report_problem</span>
+        Adminga shikoyat yuborish
+      </h2>
+
+      <label for="orderSelect" style="margin-top: 4px;">Qaysi buyurtma bo'yicha? (ixtiyoriy)</label>
+      <select id="orderSelect">
+        <option value="">Umumiy shikoyat (buyurtmasiz)</option>
+      </select>
+
+      <label for="reasonInput">Shikoyat sababi va tafsilotlari</label>
+      <textarea
+        id="reasonInput"
+        placeholder="Muammoni batafsil yozing (kamida 5 ta belgi)..."
+        maxlength="1000"
+        required
+      ></textarea>
+
+      <div id="formError" class="form-error" role="alert"></div>
+      <div id="formSuccess" class="form-success" aria-live="polite"></div>
+
+      <button id="submitBtn" class="btn btn-danger btn-block" type="submit" style="margin-top: 12px;">
+        <span class="material-symbols-outlined icon-sm" aria-hidden="true">send</span>Shikoyatni adminga yuborish
+      </button>
+    </form>
+
+    <!-- Mening shikoyatlarim ro'yxati -->
+    <div class="card-row" style="margin-bottom: 10px;">
+      <h2 style="margin: 0;">Yuborilgan shikoyatlarim</h2>
+      <select id="statusFilter" style="width: auto; min-width: 170px; margin: 0;">
+        <option value="">Barcha holatlar</option>
+        <option value="open">Ko'rib chiqilmoqda</option>
+        <option value="resolved">Hal qilindi</option>
+        <option value="rejected">Rad etildi</option>
+      </select>
+    </div>
+
+    <p id="state" class="muted" aria-live="polite">Yuklanmoqda...</p>
+    <div id="retryBox" style="display: none; margin-bottom: 12px;">
+      <button id="retryBtn" class="btn btn-outline" type="button">Qayta urinish</button>
+    </div>
+    <div id="list"></div>
+  </main>
+
+  <nav class="bottom-nav"></nav>
+
+  <script src="js/api.js"></script>
+  <script src="js/ui.js"></script>
+  <script>
+    (() => {
+      const user = requireAuth(["customer", "master"]);
+      if (!user) return;
+
+      renderNav("complaints");
+
+      const brandLink = document.getElementById("brandLink");
+      const backBtn = document.getElementById("backBtn");
+      if (user.role === "master") {
+        brandLink.href = "master-dashboard.html";
+        backBtn.href = "master-dashboard.html";
+      } else {
+        brandLink.href = "index.html";
+        backBtn.href = "my-orders.html";
+      }
+
+      const params = new URLSearchParams(window.location.search);
+      const preselectedOrderId = params.get("order_id");
+
+      const complaintForm = document.getElementById("complaintForm");
+      const orderSelect = document.getElementById("orderSelect");
+      const reasonInput = document.getElementById("reasonInput");
+      const formError = document.getElementById("formError");
+      const formSuccess = document.getElementById("formSuccess");
+      const submitBtn = document.getElementById("submitBtn");
+      const statusFilter = document.getElementById("statusFilter");
+      const stateEl = document.getElementById("state");
+      const retryBox = document.getElementById("retryBox");
+      const retryBtn = document.getElementById("retryBtn");
+      const listEl = document.getElementById("list");
+
+      const STATUS_LABELS = {
+        open: "Ko'rib chiqilmoqda",
+        resolved: "Hal qilindi",
+        rejected: "Rad etildi",
+      };
+
+      async function loadOrderOptions() {
+        try {
+          const items = [];
+          if (user.role === "customer") {
+            const orders = await apiFetch("/orders");
+            orders.forEach((o) => {
+              items.push({
+                id: o.id,
+                label: "#" + o.id + " — " + o.category_name + " (" + formatOrderStatus(o.status) + ")",
+              });
+            });
+          } else if (user.role === "master") {
+            const [ordersData, earnData] = await Promise.all([
+              apiFetch("/masters/me/orders").catch(() => ({ active_orders: [], pending_offers: [] })),
+              apiFetch("/masters/me/earnings").catch(() => ({ orders: [] })),
+            ]);
+            const seen = new Set();
+            (ordersData.active_orders || []).forEach((o) => {
+              if (!seen.has(o.id)) {
+                seen.add(o.id);
+                items.push({
+                  id: o.id,
+                  label: "#" + o.id + " — " + o.category_name + " (" + formatOrderStatus(o.status) + ")",
+                });
+              }
+            });
+            (earnData.orders || []).forEach((o) => {
+              if (!seen.has(o.id)) {
+                seen.add(o.id);
+                items.push({
+                  id: o.id,
+                  label: "#" + o.id + " — " + (o.category_name || o.category) + " (Yakunlandi)",
+                });
+              }
+            });
+          }
+
+          orderSelect.replaceChildren();
+          const defaultOpt = document.createElement("option");
+          defaultOpt.value = "";
+          defaultOpt.textContent = "Umumiy shikoyat (buyurtmasiz)";
+          orderSelect.appendChild(defaultOpt);
+
+          items.forEach((item) => {
+            const opt = document.createElement("option");
+            opt.value = String(item.id);
+            opt.textContent = item.label;
+            orderSelect.appendChild(opt);
+          });
+
+          if (preselectedOrderId && items.some((i) => String(i.id) === String(preselectedOrderId))) {
+            orderSelect.value = String(preselectedOrderId);
+          } else if (preselectedOrderId && /^\d+$/.test(preselectedOrderId)) {
+            const extraOpt = document.createElement("option");
+            extraOpt.value = String(preselectedOrderId);
+            extraOpt.textContent = "Buyurtma #" + preselectedOrderId;
+            orderSelect.appendChild(extraOpt);
+            orderSelect.value = String(preselectedOrderId);
+          }
+        } catch (e) {
+          // buyurtmalar yuklanmasa ham umumiy shikoyat yuborish imkoni qoladi
+        }
+      }
+
+      function renderDisputeCard(d) {
+        const card = document.createElement("div");
+        card.className = "card";
+
+        const head = document.createElement("div");
+        head.className = "card-row";
+
+        const titleWrap = document.createElement("div");
+        if (d.order_id && user.role === "customer") {
+          const link = document.createElement("a");
+          link.href = "order-detail.html?id=" + encodeURIComponent(d.order_id);
+          link.style.fontWeight = "700";
+          link.textContent = "Buyurtma #" + d.order_id + " — " + d.category_name;
+          titleWrap.appendChild(link);
+        } else {
+          const strong = document.createElement("strong");
+          strong.textContent = d.order_id
+            ? "Buyurtma #" + d.order_id + " — " + d.category_name
+            : "Umumiy shikoyat #" + d.id;
+          titleWrap.appendChild(strong);
+        }
+
+        const badge = document.createElement("span");
+        badge.className = "badge";
+        if (d.status === "open") {
+          badge.style.background = "#fef3c7";
+          badge.style.color = "#92400e";
+        } else if (d.status === "resolved") {
+          badge.style.background = "#dcfce7";
+          badge.style.color = "#166534";
+        } else {
+          badge.style.background = "#fee2e2";
+          badge.style.color = "#991b1b";
+        }
+        badge.textContent = STATUS_LABELS[d.status] || d.status;
+
+        head.append(titleWrap, badge);
+        card.appendChild(head);
+
+        const dateP = document.createElement("p");
+        dateP.className = "muted";
+        dateP.style.margin = "4px 0 8px";
+        dateP.style.fontSize = "0.85rem";
+        dateP.textContent = "Yuborilgan vaqti: " + formatDate(d.created_at);
+        card.appendChild(dateP);
+
+        const reasonP = document.createElement("p");
+        reasonP.style.margin = "0";
+        reasonP.textContent = d.reason;
+        card.appendChild(reasonP);
+
+        if (d.admin_note || d.status !== "open") {
+          const replyBox = document.createElement("div");
+          replyBox.className = d.status === "resolved" ? "status-banner approved" : "status-banner pending";
+          replyBox.style.marginTop = "10px";
+          if (d.status === "rejected") {
+            replyBox.style.background = "#fee2e2";
+            replyBox.style.borderColor = "#fca5a5";
+            replyBox.style.color = "#991b1b";
+          }
+          const replyTitle = document.createElement("div");
+          replyTitle.style.fontWeight = "700";
+          replyTitle.textContent = "Admin qarori: " + (STATUS_LABELS[d.status] || d.status);
+          replyBox.appendChild(replyTitle);
+
+          if (d.admin_note) {
+            const noteDiv = document.createElement("div");
+            noteDiv.style.fontWeight = "400";
+            noteDiv.style.marginTop = "4px";
+            noteDiv.textContent = "Izoh: " + d.admin_note;
+            replyBox.appendChild(noteDiv);
+          }
+          if (d.resolved_at) {
+            const resDate = document.createElement("div");
+            resDate.style.fontWeight = "400";
+            resDate.style.fontSize = "0.8rem";
+            resDate.style.marginTop = "2px";
+            resDate.style.opacity = "0.85";
+            resDate.textContent = "Ko'rib chiqilgan vaqti: " + formatDate(d.resolved_at);
+            replyBox.appendChild(resDate);
+          }
+          card.appendChild(replyBox);
+        }
+
+        return card;
+      }
+
+      async function loadDisputes(silent) {
+        if (!silent) {
+          listEl.replaceChildren();
+          retryBox.style.display = "none";
+          retryBtn.disabled = true;
+          stateEl.textContent = "Yuklanmoqda...";
+          stateEl.className = "muted";
+        }
+        try {
+          const q = statusFilter.value ? "?status=" + encodeURIComponent(statusFilter.value) : "";
+          const items = await apiFetch("/orders/my-disputes" + q);
+          retryBtn.disabled = false;
+          retryBox.style.display = "none";
+          listEl.replaceChildren();
+          if (!items.length) {
+            stateEl.textContent = "";
+            const empty = document.createElement("div");
+            empty.className = "card empty-state";
+            empty.textContent = "Hozircha shikoyatlar yo'q";
+            listEl.appendChild(empty);
+            return;
+          }
+          stateEl.textContent = items.length + " ta shikoyat";
+          stateEl.className = "muted";
+          items.forEach((d) => listEl.appendChild(renderDisputeCard(d)));
+        } catch (err) {
+          if (silent) return;
+          retryBtn.disabled = false;
+          if (err.status === 403) {
+            renderForbidden(err.message);
+            return;
+          }
+          stateEl.textContent = "Xatolik: " + err.message;
+          stateEl.className = "err";
+          retryBox.style.display = "block";
+        }
+      }
+
+      complaintForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        formError.textContent = "";
+        formSuccess.textContent = "";
+
+        const reason = reasonInput.value.trim();
+        if (reason.length < 5) {
+          formError.textContent = "Shikoyat sababi kamida 5 ta belgidan iborat bo'lishi kerak";
+          reasonInput.focus();
+          return;
+        }
+
+        const orderIdVal = orderSelect.value ? parseInt(orderSelect.value, 10) : null;
+        submitBtn.disabled = true;
+        try {
+          await apiFetch("/orders/my-disputes", {
+            method: "POST",
+            body: JSON.stringify({
+              order_id: orderIdVal,
+              reason,
+            }),
+          });
+          reasonInput.value = "";
+          formSuccess.textContent = "Shikoyatingiz adminga muvaffaqiyatli yuborildi!";
+          toast("Shikoyat adminga yuborildi", "success");
+          loadDisputes();
+        } catch (err) {
+          formError.textContent = err.message;
+        } finally {
+          submitBtn.disabled = false;
+        }
+      });
+
+      statusFilter.addEventListener("change", () => loadDisputes());
+      retryBtn.addEventListener("click", () => loadDisputes());
+
+      loadOrderOptions();
+      loadDisputes();
+      startPolling(() => loadDisputes(true), 15000);
+    })();
+  </script>
+</body>
+</html>

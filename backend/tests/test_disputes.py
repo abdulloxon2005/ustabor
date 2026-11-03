@@ -281,3 +281,46 @@ def test_disputes_require_auth(client, db, auth_header):
     env = _build_env(db, auth_header, order_status=OrderStatus.COMPLETED)
     assert client.get(DISPUTES.format(id=env["order_id"])).status_code == 401
     assert client.post(DISPUTE.format(id=env["order_id"]), json={"reason": "x"}).status_code == 401
+
+
+def test_my_disputes_customer_and_master_and_admin_notification(client, db, auth_header):
+    env = _build_env(db, auth_header, order_status=OrderStatus.ASSIGNED)
+    # 1. Customer raises complaint via /orders/my-disputes with order_id
+    r_cust = client.post(
+        "/api/v1/orders/my-disputes",
+        json={"order_id": env["order_id"], "reason": "Usta qo'ng'iroqqa javob bermayapti"},
+        headers=env["customer_headers"],
+    )
+    assert r_cust.status_code == 201, r_cust.text
+
+    # 2. Master raises general complaint via /orders/my-disputes without order_id
+    r_master = client.post(
+        "/api/v1/orders/my-disputes",
+        json={"reason": "Ilovada buyurtma manzili noto'g'ri chiqyapti"},
+        headers=env["master_headers"],
+    )
+    assert r_master.status_code == 201, r_master.text
+    assert r_master.json()["order_id"] is None
+
+    # 3. Customer sees own complaint in /orders/my-disputes
+    r_cust_list = client.get("/api/v1/orders/my-disputes", headers=env["customer_headers"])
+    assert r_cust_list.status_code == 200
+    assert len(r_cust_list.json()) == 1
+    assert r_cust_list.json()[0]["order_id"] == env["order_id"]
+
+    # 4. Master sees own complaint in /orders/my-disputes
+    r_master_list = client.get("/api/v1/orders/my-disputes", headers=env["master_headers"])
+    assert r_master_list.status_code == 200
+    assert len(r_master_list.json()) == 1
+    assert r_master_list.json()[0]["category_name"] == "Umumiy shikoyat"
+
+    # 5. Admin sees both complaints in /admin/disputes and receives notifications
+    r_admin = client.get(ADMIN_DISPUTES, headers=env["admin_headers"])
+    assert r_admin.status_code == 200
+    assert len(r_admin.json()) == 2
+
+    r_notif = client.get("/api/v1/notifications", headers=env["admin_headers"])
+    assert r_notif.status_code == 200
+    dispute_notifs = [n for n in r_notif.json() if n["type"] == "new_dispute"]
+    assert len(dispute_notifs) >= 2
+

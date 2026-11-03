@@ -9,7 +9,7 @@ from app.core.config import MAX_DB_INT
 from app.db.session import get_db
 from app.models import Category, ChatReport, Dispute, MasterProfile, MasterService, Order, OrderMessage, OrderOffer, OrderPhoto, OrderStatusHistory, Quote, Review, User
 from app.models.enums import DisputeStatus, OfferStatus, OrderStatus, Role, SelectionMode
-from app.schemas.dispute import DisputeCreate, DisputeOut
+from app.schemas.dispute import DisputeCreate, DisputeOut, UserDisputeListItem
 from app.schemas.message import MessageIn, MessageOut
 from app.schemas.order import (
     OfferOut,
@@ -347,6 +347,117 @@ def list_orders(
 
     orders = db.scalars(stmt).all()
     return [_list_item(o, db) for o in orders]
+
+
+def _notify_admins_of_dispute(
+    db: Session, user: User, dispute: Dispute, order: Order | None = None
+) -> None:
+    role_label = "Mijoz" if user.role == Role.CUSTOMER else "Usta"
+    order_part = f"Buyurtma #{order.id} bo'yicha " if order else ""
+    title = f"Yangi shikoyat ({role_label})"
+    body = f"{order_part}{role_label} {user.full_name} ({user.phone}) shikoyat yubordi: {dispute.reason[:120]}"
+    admins = db.scalars(
+        select(User).where(User.role == Role.ADMIN, User.is_active.is_(True))
+    ).all()
+    for adm in admins:
+        notify.notify_user(
+            db,
+            adm.id,
+            "new_dispute",
+            title,
+            body,
+            order_id=order.id if order else None,
+        )
+
+
+@router.get("/my-disputes", response_model=list[UserDisputeListItem])
+def list_my_disputes(
+    status_filter: DisputeStatus | None = Query(default=None, alias="status"),
+    user: User = Depends(require_role(Role.CUSTOMER, Role.MASTER)),
+    db: Session = Depends(get_db),
+):
+    stmt = (
+        select(Dispute, Order.status, Category.name)
+        .outerjoin(Order, Dispute.order_id == Order.id)
+        .outerjoin(Category, Order.category_id == Category.id)
+        .where(Dispute.raised_by == user.id)
+        .order_by(Dispute.created_at.desc(), Dispute.id.desc())
+    )
+    if status_filter is not None:
+        stmt = stmt.where(Dispute.status == status_filter)
+    rows = db.execute(stmt).all()
+    return [
+        UserDisputeListItem(
+            id=d.id,
+            order_id=d.order_id,
+            category_name=cat_name or "Umumiy shikoyat",
+            order_status=(
+                order_status.value
+                if hasattr(order_status, "value")
+                else (str(order_status) if order_status else None)
+            ),
+            status=d.status,
+            reason=d.reason,
+            admin_note=d.admin_note,
+            created_at=d.created_at,
+            resolved_at=d.resolved_at,
+        )
+        for d, order_status, cat_name in rows
+    ]
+
+
+@router.post(
+    "/my-disputes", response_model=DisputeOut, status_code=status.HTTP_201_CREATED
+)
+def create_my_dispute(
+    data: DisputeCreate,
+    user: User = Depends(require_role(Role.CUSTOMER, Role.MASTER)),
+    db: Session = Depends(get_db),
+):
+    order: Order | None = None
+    if data.order_id is not None:
+        order = db.get(Order, data.order_id)
+        if order is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Buyurtma topilmadi")
+        if user.role == Role.CUSTOMER:
+            if order.customer_id != user.id:
+                raise HTTPException(status.HTTP_404_NOT_FOUND, "Buyurtma topilmadi")
+        elif user.role == Role.MASTER:
+            profile = db.scalar(
+                select(MasterProfile).where(MasterProfile.user_id == user.id)
+            )
+            has_offer = (
+                db.scalar(
+                    select(OrderOffer.id).where(
+                        OrderOffer.order_id == order.id,
+                        OrderOffer.master_id == profile.id,
+                    )
+                )
+                if profile
+                else None
+            )
+            if profile is None or (order.master_id != profile.id and has_offer is None):
+                raise HTTPException(status.HTTP_404_NOT_FOUND, "Buyurtma topilmadi")
+
+        existing_open = db.scalar(
+            select(Dispute).where(
+                Dispute.order_id == order.id, Dispute.status == DisputeStatus.OPEN
+            )
+        )
+        if existing_open is not None:
+            raise HTTPException(status.HTTP_409_CONFLICT, DISPUTE_ALREADY_OPEN)
+
+    dispute = Dispute(
+        order_id=order.id if order else None,
+        raised_by=user.id,
+        reason=data.reason,
+    )
+    db.add(dispute)
+    db.flush()
+    _notify_admins_of_dispute(db, user, dispute, order)
+    db.commit()
+    db.refresh(dispute)
+    return dispute
 
 
 @router.get("/{order_id}", response_model=OrderDetailOut)
@@ -917,11 +1028,11 @@ def report_chat_message(
 # ---------- Shikoyat/nizo ----------
 
 DISPUTE_WRONG_STATUS = (
-    "Shikoyat faqat jarayondagi, yakunlangan yoki bekor qilingan buyurtma uchun mumkin"
+    "Shikoyat faqat biriktirilgan, jarayondagi, yakunlangan yoki bekor qilingan buyurtma uchun mumkin"
 )
 DISPUTE_ALREADY_OPEN = "Bu buyurtma bo'yicha allaqachon ko'rib chiqilayotgan shikoyat bor"
 _DISPUTE_ALLOWED_STATUSES = frozenset(
-    {OrderStatus.IN_PROGRESS, OrderStatus.COMPLETED, OrderStatus.CANCELLED}
+    {OrderStatus.ASSIGNED, OrderStatus.IN_PROGRESS, OrderStatus.COMPLETED, OrderStatus.CANCELLED}
 )
 
 
@@ -963,6 +1074,8 @@ def create_dispute(
 
     dispute = Dispute(order_id=order.id, raised_by=user.id, reason=data.reason)
     db.add(dispute)
+    db.flush()
+    _notify_admins_of_dispute(db, user, dispute, order)
     db.commit()
     db.refresh(dispute)
     return dispute

@@ -5,15 +5,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#2563eb" />
   <title>Ro'yxatdan o'tish - UstaBor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" />
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body class="auth-page">
   <header class="app-header">
-    <a class="brand" href="index.html">UstaBor</a>
+    <a class="brand" href="index.html"><span class="material-symbols-outlined" aria-hidden="true">handyman</span>UstaBor</a>
   </header>
 
   <main class="container">
     <form id="form" class="card auth-card" novalidate>
+      <div class="auth-icon-badge"><span class="material-symbols-outlined" aria-hidden="true">person_add</span></div>
       <h1>Ro'yxatdan o'tish</h1>
       <p id="step-hint" class="muted">Yangi akkaunt yarating</p>
 
@@ -22,11 +26,11 @@
         <div class="segmented" role="radiogroup" aria-labelledby="role-label">
           <label>
             <input type="radio" name="role" value="customer" checked />
-            <span>Mijoz</span>
+            <span><span class="material-symbols-outlined icon-sm" aria-hidden="true">person</span>Mijoz</span>
           </label>
           <label>
             <input type="radio" name="role" value="master" />
-            <span>Usta</span>
+            <span><span class="material-symbols-outlined icon-sm" aria-hidden="true">engineering</span>Usta</span>
           </label>
         </div>
 
@@ -50,7 +54,7 @@
                autocomplete="one-time-code" minlength="6" maxlength="6"
                pattern="\d{6}" placeholder="______" />
         <p class="auth-switch" style="margin-top:8px;">
-          <a href="#" id="back-link">← Telefon raqamini o'zgartirish</a>
+          <a href="#" id="back-link"><span class="material-symbols-outlined icon-sm" aria-hidden="true">arrow_back</span>Telefon raqamini o'zgartirish</a>
           ·
           <a href="#" id="resend-link">Kodni qayta yuborish</a>
         </p>

@@ -5,351 +5,376 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#2563eb" />
   <title>Boshqaruv paneli - UstaBor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" />
   <link rel="stylesheet" href="css/style.css" />
 </head>
-<body>
+<body class="admin-page">
   <header class="app-header">
-    <a class="brand" href="admin.html">UstaBor</a>
+    <a class="brand" href="admin.html"><span class="material-symbols-outlined" aria-hidden="true">handyman</span>UstaBor</a>
     <button id="logoutBtn" class="btn btn-outline" type="button">Chiqish</button>
   </header>
 
   <main class="container">
     <h1>Boshqaruv paneli</h1>
 
-    <!-- Tab almashtirgich -->
-    <div class="tab-bar" role="tablist">
-      <button id="tabOrdersBtn" class="tab-btn active" type="button" role="tab">Buyurtmalar</button>
-      <button id="tabUsersBtn" class="tab-btn" type="button" role="tab">Foydalanuvchilar</button>
-      <button id="tabCommissionsBtn" class="tab-btn" type="button" role="tab">Komissiya</button>
-      <button id="tabDisputesBtn" class="tab-btn" type="button" role="tab">Shikoyatlar</button>
-      <button id="tabChatsBtn" class="tab-btn" type="button" role="tab">Chatlar</button>
-      <button id="tabAuditBtn" class="tab-btn" type="button" role="tab">Audit</button>
-      <button id="tabStatsBtn" class="tab-btn" type="button" role="tab">Statistika</button>
-    </div>
+    <div class="admin-shell">
+      <!-- Tab almashtirgich (Kompyuterda yon menyu, telefonda yuqori tab) -->
+      <aside class="admin-sidebar">
+        <div class="tab-bar" role="tablist">
+          <button id="tabOrdersBtn" class="tab-btn active" type="button" role="tab"><span class="material-symbols-outlined icon-sm" aria-hidden="true">receipt_long</span>Buyurtmalar</button>
+          <button id="tabUsersBtn" class="tab-btn" type="button" role="tab"><span class="material-symbols-outlined icon-sm" aria-hidden="true">group</span>Foydalanuvchilar</button>
+          <button id="tabCommissionsBtn" class="tab-btn" type="button" role="tab"><span class="material-symbols-outlined icon-sm" aria-hidden="true">payments</span>Komissiya</button>
+          <button id="tabDisputesBtn" class="tab-btn" type="button" role="tab"><span class="material-symbols-outlined icon-sm" aria-hidden="true">report_problem</span>Shikoyatlar<span id="openDisputesBadge" class="badge" style="display: none; background: var(--err); color: #fff; font-size: 0.72rem; padding: 1px 7px; margin-left: auto;">0</span></button>
+          <button id="tabChatsBtn" class="tab-btn" type="button" role="tab"><span class="material-symbols-outlined icon-sm" aria-hidden="true">forum</span>Chatlar</button>
+          <button id="tabAuditBtn" class="tab-btn" type="button" role="tab"><span class="material-symbols-outlined icon-sm" aria-hidden="true">history</span>Audit</button>
+          <button id="tabStatsBtn" class="tab-btn" type="button" role="tab"><span class="material-symbols-outlined icon-sm" aria-hidden="true">monitoring</span>Statistika</button>
+        </div>
+      </aside>
 
-    <!-- ================= TAB 1: BUYURTMALAR ================= -->
-    <section id="tabOrders">
-      <div class="card" style="padding: 12px;">
-        <label for="orderStatusFilter" style="margin-top: 0;">Holat bo'yicha saralash:</label>
-        <select id="orderStatusFilter">
-          <option value="">Barchasi</option>
-          <option value="searching">Qidirilmoqda</option>
-          <option value="assigned">Biriktirildi</option>
-          <option value="in_progress">Jarayonda</option>
-          <option value="completed">Yakunlandi</option>
-          <option value="cancelled">Bekor qilindi</option>
-        </select>
-      </div>
-
-      <p id="ordersState" class="muted" aria-live="polite">Yuklanmoqda...</p>
-      <div id="ordersRetryBox" style="display: none; margin-bottom: 12px;">
-        <button id="ordersRetryBtn" class="btn btn-outline" type="button">Qayta urinish</button>
-      </div>
-
-      <div class="table-wrap">
-        <table id="ordersTable" class="stack" style="display: none;">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Kategoriya</th>
-              <th>Mijoz</th>
-              <th>Usta</th>
-              <th>Manzil</th>
-              <th>Narx</th>
-              <th>Komissiya</th>
-              <th>Holat</th>
-              <th>Sana</th>
-              <th>Amallar</th>
-            </tr>
-          </thead>
-          <tbody id="ordersTbody"></tbody>
-        </table>
-      </div>
-
-      <div id="ordersPagination" class="pagination-row" style="display: none;">
-        <button id="ordersPrevBtn" class="btn btn-outline" type="button">Oldingi</button>
-        <span id="ordersPageInfo" class="muted"></span>
-        <button id="ordersNextBtn" class="btn btn-outline" type="button">Keyingi</button>
-      </div>
-    </section>
-
-    <!-- ================= TAB 2: FOYDALUVCHILAR ================= -->
-    <section id="tabUsers" style="display: none;">
-      <form id="userSearchForm" class="card" style="padding: 12px;" novalidate>
-        <div style="display: grid; gap: 8px; grid-template-columns: 1fr;">
-          <div>
-            <label for="userRoleFilter" style="margin-top: 0;">Rol:</label>
-            <select id="userRoleFilter">
-              <option value="">Barcha rollar</option>
-              <option value="customer">Mijoz</option>
-              <option value="master">Usta</option>
-              <option value="admin">Admin</option>
+      <div class="admin-workspace">
+        <!-- ================= TAB 1: BUYURTMALAR ================= -->
+        <section id="tabOrders">
+          <div class="card admin-toolbar" style="padding: 12px 16px;">
+            <label for="orderStatusFilter" style="margin: 0;">Holat bo'yicha saralash:</label>
+            <select id="orderStatusFilter">
+              <option value="">Barchasi</option>
+              <option value="searching">Qidirilmoqda</option>
+              <option value="assigned">Biriktirildi</option>
+              <option value="in_progress">Jarayonda</option>
+              <option value="completed">Yakunlandi</option>
+              <option value="cancelled">Bekor qilindi</option>
             </select>
           </div>
-          <div>
-            <label for="userSearchInput" style="margin-top: 0;">Qidirish (telefon yoki ism):</label>
-            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-              <input id="userSearchInput" type="search" placeholder="Telefon yoki ism..." style="flex: 1 1 180px;" />
-              <button id="userSearchBtn" class="btn" type="submit">Qidirish</button>
+
+          <p id="ordersState" class="muted" aria-live="polite">Yuklanmoqda...</p>
+          <div id="ordersRetryBox" style="display: none; margin-bottom: 12px;">
+            <button id="ordersRetryBtn" class="btn btn-outline" type="button">Qayta urinish</button>
+          </div>
+
+          <div class="table-wrap">
+            <table id="ordersTable" class="stack" style="display: none;">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Kategoriya</th>
+                  <th>Mijoz</th>
+                  <th>Usta</th>
+                  <th>Manzil</th>
+                  <th>Narx</th>
+                  <th>Komissiya</th>
+                  <th>Holat</th>
+                  <th>Sana</th>
+                  <th>Amallar</th>
+                </tr>
+              </thead>
+              <tbody id="ordersTbody"></tbody>
+            </table>
+          </div>
+
+          <div id="ordersPagination" class="pagination-row" style="display: none;">
+            <button id="ordersPrevBtn" class="btn btn-outline" type="button">Oldingi</button>
+            <span id="ordersPageInfo" class="muted"></span>
+            <button id="ordersNextBtn" class="btn btn-outline" type="button">Keyingi</button>
+          </div>
+        </section>
+
+        <!-- ================= TAB 2: FOYDALUVCHILAR ================= -->
+        <section id="tabUsers" style="display: none;">
+          <form id="userSearchForm" class="card" style="padding: 14px 16px;" novalidate>
+            <div class="admin-users-filter-grid">
+              <div>
+                <label for="userRoleFilter" style="margin-top: 0;">Rol:</label>
+                <select id="userRoleFilter">
+                  <option value="">Barcha rollar</option>
+                  <option value="customer">Mijoz</option>
+                  <option value="master">Usta</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+              <div>
+                <label for="userSearchInput" style="margin-top: 0;">Qidirish (telefon yoki ism):</label>
+                <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                  <input id="userSearchInput" type="search" placeholder="Telefon yoki ism..." style="flex: 1 1 180px;" />
+                  <button id="userSearchBtn" class="btn" type="submit">Qidirish</button>
+                </div>
+              </div>
+            </div>
+          </form>
+
+          <p id="usersState" class="muted" aria-live="polite"></p>
+          <div id="usersRetryBox" style="display: none; margin-bottom: 12px;">
+            <button id="usersRetryBtn" class="btn btn-outline" type="button">Qayta urinish</button>
+          </div>
+
+          <div class="table-wrap">
+            <table id="usersTable" class="stack" style="display: none;">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Ism</th>
+                  <th>Telefon</th>
+                  <th>Rol</th>
+                  <th>Holat</th>
+                  <th>Profil / Reyting</th>
+                  <th>Amallar</th>
+                </tr>
+              </thead>
+              <tbody id="usersTbody"></tbody>
+            </table>
+          </div>
+
+          <div id="usersPagination" class="pagination-row" style="display: none;">
+            <button id="usersPrevBtn" class="btn btn-outline" type="button">Oldingi</button>
+            <span id="usersPageInfo" class="muted"></span>
+            <button id="usersNextBtn" class="btn btn-outline" type="button">Keyingi</button>
+          </div>
+        </section>
+
+        <!-- ================= TAB 3: KOMISSIYA ================= -->
+        <section id="tabCommissions" style="display: none;">
+          <div class="admin-comm-top-grid">
+            <form id="commissionSettingsForm" class="card" style="padding: 16px; margin-bottom: 0;" novalidate>
+              <h3 style="margin-top: 0;">Komissiya sozlamalari</h3>
+              <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px;">
+                <label style="display: flex; align-items: center; gap: 8px; font-weight: 500; margin: 0;">
+                  <input id="commissionEnabled" type="checkbox" style="width: 20px; height: 20px; min-height: 0; margin: 0;" />
+                  Komissiya yoqilgan
+                </label>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <label for="commissionRate" style="margin: 0;">Stavka (%):</label>
+                  <input id="commissionRate" type="number" min="0" max="100" style="width: 100px;" />
+                </div>
+                <button id="commissionSettingsBtn" class="btn" type="submit">Saqlash</button>
+              </div>
+              <p class="muted" id="commissionUpdatedAt" style="margin: 8px 0 0; font-size: 0.85rem;"></p>
+              <div id="commissionSettingsError" class="form-error" role="alert"></div>
+              <div id="commissionSettingsSuccess" class="form-success" aria-live="polite"></div>
+            </form>
+
+            <form id="commFilterForm" class="card filters" style="padding: 16px; margin-bottom: 0;" novalidate>
+              <div>
+                <label for="commDateFrom" style="margin-top: 0;">Boshlanish sanasi:</label>
+                <input id="commDateFrom" type="date" />
+              </div>
+              <div>
+                <label for="commDateTo" style="margin-top: 0;">Tugash sanasi:</label>
+                <input id="commDateTo" type="date" />
+              </div>
+              <button id="commFilterBtn" class="btn" type="submit">Saralash</button>
+            </form>
+          </div>
+
+          <!-- Xulosa kartochkalari -->
+          <div class="summary-grid" style="margin-top: 16px;">
+            <div class="stat-card">
+              <div class="muted">Bajarilgan buyurtmalar</div>
+              <div id="statCompletedCount" class="val">0</div>
+            </div>
+            <div class="stat-card">
+              <div class="muted">Jami tushum</div>
+              <div id="statGrossTotal" class="val">0 so'm</div>
+            </div>
+            <div class="stat-card">
+              <div class="muted">Jami komissiya</div>
+              <div id="statCommissionTotal" class="val">0 so'm</div>
             </div>
           </div>
-        </div>
-      </form>
 
-      <p id="usersState" class="muted" aria-live="polite"></p>
-      <div id="usersRetryBox" style="display: none; margin-bottom: 12px;">
-        <button id="usersRetryBtn" class="btn btn-outline" type="button">Qayta urinish</button>
-      </div>
-
-      <div class="table-wrap">
-        <table id="usersTable" class="stack" style="display: none;">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Ism</th>
-              <th>Telefon</th>
-              <th>Rol</th>
-              <th>Holat</th>
-              <th>Profil / Reyting</th>
-              <th>Amallar</th>
-            </tr>
-          </thead>
-          <tbody id="usersTbody"></tbody>
-        </table>
-      </div>
-
-      <div id="usersPagination" class="pagination-row" style="display: none;">
-        <button id="usersPrevBtn" class="btn btn-outline" type="button">Oldingi</button>
-        <span id="usersPageInfo" class="muted"></span>
-        <button id="usersNextBtn" class="btn btn-outline" type="button">Keyingi</button>
-      </div>
-    </section>
-
-    <!-- ================= TAB 3: KOMISSIYA ================= -->
-    <section id="tabCommissions" style="display: none;">
-      <form id="commissionSettingsForm" class="card" style="padding: 12px; margin-bottom: 16px;" novalidate>
-        <h3 style="margin-top: 0;">Komissiya sozlamalari</h3>
-        <label style="display: flex; align-items: center; gap: 8px; font-weight: 400;">
-          <input id="commissionEnabled" type="checkbox" style="width: 20px; height: 20px; min-height: 0; margin: 0;" />
-          Komissiya yoqilgan
-        </label>
-        <label for="commissionRate">Stavka (%)</label>
-        <input id="commissionRate" type="number" min="0" max="100" style="max-width: 120px;" />
-        <p class="muted" id="commissionUpdatedAt" style="margin: 6px 0; font-size: 0.85rem;"></p>
-        <div id="commissionSettingsError" class="form-error" role="alert"></div>
-        <div id="commissionSettingsSuccess" class="form-success" aria-live="polite"></div>
-        <button id="commissionSettingsBtn" class="btn" type="submit" style="margin-top: 6px;">Saqlash</button>
-      </form>
-
-      <form id="commFilterForm" class="card filters" style="padding: 12px; margin-bottom: 16px;" novalidate>
-        <div>
-          <label for="commDateFrom" style="margin-top: 0;">Boshlanish sanasi:</label>
-          <input id="commDateFrom" type="date" />
-        </div>
-        <div>
-          <label for="commDateTo">Tugash sanasi:</label>
-          <input id="commDateTo" type="date" />
-        </div>
-        <button id="commFilterBtn" class="btn" type="submit">Saralash</button>
-      </form>
-
-      <!-- Xulosa kartochkalari -->
-      <div class="summary-grid">
-        <div class="stat-card">
-          <div class="muted">Bajarilgan buyurtmalar</div>
-          <div id="statCompletedCount" class="val">0</div>
-        </div>
-        <div class="stat-card">
-          <div class="muted">Jami tushum</div>
-          <div id="statGrossTotal" class="val">0 so'm</div>
-        </div>
-        <div class="stat-card">
-          <div class="muted">Jami komissiya</div>
-          <div id="statCommissionTotal" class="val">0 so'm</div>
-        </div>
-      </div>
-
-      <p id="commState" class="muted" aria-live="polite"></p>
-      <div id="commRetryBox" style="display: none; margin-bottom: 12px;">
-        <button id="commRetryBtn" class="btn btn-outline" type="button">Qayta urinish</button>
-      </div>
-
-      <div class="table-wrap">
-        <table id="commTable" class="stack" style="display: none;">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Kategoriya</th>
-              <th>Usta</th>
-              <th>Yakunlangan sana</th>
-              <th>Kelishilgan narx</th>
-              <th>Stavka</th>
-              <th>Komissiya</th>
-              <th>Usta sof</th>
-              <th>To'lov holati</th>
-            </tr>
-          </thead>
-          <tbody id="commTbody"></tbody>
-        </table>
-      </div>
-
-      <div id="commPagination" class="pagination-row" style="display: none;">
-        <button id="commPrevBtn" class="btn btn-outline" type="button">Oldingi</button>
-        <span id="commPageInfo" class="muted"></span>
-        <button id="commNextBtn" class="btn btn-outline" type="button">Keyingi</button>
-      </div>
-    </section>
-
-    <!-- ================= TAB 4: SHIKOYATLAR ================= -->
-    <section id="tabDisputes" style="display: none;">
-      <div class="card" style="padding: 12px;">
-        <label for="disputeStatusFilter" style="margin-top: 0;">Holat bo'yicha saralash:</label>
-        <select id="disputeStatusFilter">
-          <option value="">Barchasi</option>
-          <option value="open">Ko'rib chiqilmoqda</option>
-          <option value="resolved">Hal qilindi</option>
-          <option value="rejected">Rad etildi</option>
-        </select>
-      </div>
-
-      <p id="disputeState" class="muted" aria-live="polite"></p>
-      <div id="disputeRetryBox" style="display: none; margin-bottom: 12px;">
-        <button id="disputeRetryBtn" class="btn btn-outline" type="button">Qayta urinish</button>
-      </div>
-      <div id="disputeList"></div>
-    </section>
-
-    <!-- ================= TAB: CHATLAR ================= -->
-    <section id="tabChats" style="display: none;">
-      <h3 style="margin: 4px 0 8px;">Shikoyat qilingan xabarlar</h3>
-      <p id="chatsState" class="muted" aria-live="polite">Yuklanmoqda...</p>
-      <div id="chatsRetryBox" style="display: none; margin-bottom: 12px;">
-        <button id="chatsRetryBtn" class="btn btn-outline" type="button">Qayta urinish</button>
-      </div>
-      <div id="chatReportsList"></div>
-    </section>
-
-    <!-- ================= TAB 5: AUDIT ================= -->
-    <section id="tabAudit" style="display: none;">
-      <div class="card" style="padding: 12px; display: flex; gap: 12px; flex-wrap: wrap;">
-        <div>
-          <label for="auditActionFilter" style="margin-top: 0;">Amal:</label>
-          <select id="auditActionFilter">
-            <option value="">Barchasi</option>
-            <option value="create_category">Kategoriya yaratish</option>
-            <option value="update_category">Kategoriya tahrirlash</option>
-            <option value="approve_master">Ustani tasdiqlash</option>
-            <option value="revoke_master_approval">Tasdiqni bekor qilish</option>
-            <option value="assign_master">Usta biriktirish</option>
-            <option value="cancel_order">Buyurtmani bekor qilish</option>
-            <option value="block_user">Foydalanuvchini bloklash</option>
-            <option value="unblock_user">Blokdan chiqarish</option>
-            <option value="resolve_dispute">Shikoyatni hal qilish</option>
-          </select>
-        </div>
-        <div>
-          <label for="auditAdminFilter" style="margin-top: 0;">Admin ID:</label>
-          <input id="auditAdminFilter" type="number" min="1" placeholder="Barchasi" style="width: 120px;" />
-        </div>
-      </div>
-
-      <p id="auditState" class="muted" aria-live="polite"></p>
-      <div id="auditRetryBox" style="display: none; margin-bottom: 12px;">
-        <button id="auditRetryBtn" class="btn btn-outline" type="button">Qayta urinish</button>
-      </div>
-
-      <div class="table-wrap">
-        <table id="auditTable" class="stack" style="display: none;">
-          <thead>
-            <tr>
-              <th>Sana</th>
-              <th>Admin</th>
-              <th>Amal</th>
-              <th>Nishon</th>
-              <th>Tafsilot</th>
-            </tr>
-          </thead>
-          <tbody id="auditTbody"></tbody>
-        </table>
-      </div>
-    </section>
-
-    <!-- ================= TAB 6: STATISTIKA ================= -->
-    <section id="tabStats" style="display: none;">
-      <div class="card" style="padding: 12px;">
-        <label for="statsDaysFilter" style="margin-top: 0;">Davr:</label>
-        <select id="statsDaysFilter">
-          <option value="7">So'nggi 7 kun</option>
-          <option value="30" selected>So'nggi 30 kun</option>
-          <option value="90">So'nggi 90 kun</option>
-        </select>
-      </div>
-
-      <p id="statsState" class="muted" aria-live="polite"></p>
-      <div id="statsRetryBox" style="display: none; margin-bottom: 12px;">
-        <button id="statsRetryBtn" class="btn btn-outline" type="button">Qayta urinish</button>
-      </div>
-
-      <div id="statsContent" style="display: none;">
-        <div class="summary-grid">
-          <div class="stat-card">
-            <div class="muted">Jami buyurtmalar</div>
-            <div id="statsTotalOrders" class="val">0</div>
+          <p id="commState" class="muted" aria-live="polite"></p>
+          <div id="commRetryBox" style="display: none; margin-bottom: 12px;">
+            <button id="commRetryBtn" class="btn btn-outline" type="button">Qayta urinish</button>
           </div>
-          <div class="stat-card">
-            <div class="muted">Yakunlangan buyurtmalar</div>
-            <div id="statsTotalCompleted" class="val">0</div>
-          </div>
-          <div class="stat-card">
-            <div class="muted">Jami komissiya</div>
-            <div id="statsTotalCommission" class="val">0 so'm</div>
-          </div>
-          <div class="stat-card">
-            <div class="muted">Yangi foydalanuvchilar</div>
-            <div id="statsTotalNewUsers" class="val">0</div>
-          </div>
-        </div>
 
-        <div class="card" style="padding: 12px; margin-top: 16px;">
-          <h3 style="margin-top: 0;">Kunlik buyurtmalar va komissiya</h3>
-          <canvas id="ordersChart" height="100"></canvas>
-        </div>
-
-        <div class="card" style="padding: 12px; margin-top: 16px;">
-          <h3 style="margin-top: 0;">Top kategoriyalar</h3>
-          <canvas id="categoriesChart" height="100"></canvas>
-        </div>
-
-        <div class="card" style="padding: 12px; margin-top: 16px;">
-          <h3 style="margin-top: 0;">Yangi foydalanuvchilar</h3>
-          <canvas id="usersChart" height="100"></canvas>
-        </div>
-
-        <div class="card" style="padding: 12px; margin-top: 16px;">
-          <h3 style="margin-top: 0;">Top ustalar (bajarilgan ishlar bo'yicha)</h3>
           <div class="table-wrap">
-            <table id="topMastersTable" class="stack">
+            <table id="commTable" class="stack" style="display: none;">
               <thead>
-                <tr><th>Usta</th><th>Bajarilgan</th><th>Rad etilgan</th><th>Daromad</th></tr>
+                <tr>
+                  <th>ID</th>
+                  <th>Kategoriya</th>
+                  <th>Usta</th>
+                  <th>Yakunlangan sana</th>
+                  <th>Kelishilgan narx</th>
+                  <th>Stavka</th>
+                  <th>Komissiya</th>
+                  <th>Usta sof</th>
+                  <th>To'lov holati</th>
+                </tr>
               </thead>
-              <tbody id="topMastersTbody"></tbody>
+              <tbody id="commTbody"></tbody>
             </table>
           </div>
-        </div>
 
-        <div class="card" style="padding: 12px; margin-top: 16px;">
-          <h3 style="margin-top: 0;">Ko'p rad etadigan ustalar</h3>
+          <div id="commPagination" class="pagination-row" style="display: none;">
+            <button id="commPrevBtn" class="btn btn-outline" type="button">Oldingi</button>
+            <span id="commPageInfo" class="muted"></span>
+            <button id="commNextBtn" class="btn btn-outline" type="button">Keyingi</button>
+          </div>
+        </section>
+
+        <!-- ================= TAB 4: SHIKOYATLAR ================= -->
+        <section id="tabDisputes" style="display: none;">
+          <div class="card admin-toolbar" style="padding: 12px 16px;">
+            <label for="disputeStatusFilter" style="margin: 0;">Holat:</label>
+            <select id="disputeStatusFilter">
+              <option value="">Barcha holatlar</option>
+              <option value="open">Ko'rib chiqilmoqda</option>
+              <option value="resolved">Hal qilindi</option>
+              <option value="rejected">Rad etildi</option>
+            </select>
+            <label for="disputeRoleFilter" style="margin: 0;">Kimdan:</label>
+            <select id="disputeRoleFilter">
+              <option value="">Barchasi (Mijoz va Usta)</option>
+              <option value="customer">Mijozlardan</option>
+              <option value="master">Ustalardan</option>
+            </select>
+          </div>
+
+          <p id="disputeState" class="muted" aria-live="polite"></p>
+          <div id="disputeRetryBox" style="display: none; margin-bottom: 12px;">
+            <button id="disputeRetryBtn" class="btn btn-outline" type="button">Qayta urinish</button>
+          </div>
+          <div id="disputeList" class="admin-cards-grid"></div>
+        </section>
+
+        <!-- ================= TAB: CHATLAR ================= -->
+        <section id="tabChats" style="display: none;">
+          <h3 style="margin: 4px 0 8px;">Shikoyat qilingan xabarlar</h3>
+          <p id="chatsState" class="muted" aria-live="polite">Yuklanmoqda...</p>
+          <div id="chatsRetryBox" style="display: none; margin-bottom: 12px;">
+            <button id="chatsRetryBtn" class="btn btn-outline" type="button">Qayta urinish</button>
+          </div>
+          <div id="chatReportsList" class="admin-cards-grid"></div>
+        </section>
+
+        <!-- ================= TAB 5: AUDIT ================= -->
+        <section id="tabAudit" style="display: none;">
+          <div class="card" style="padding: 14px 16px; display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end;">
+            <div style="min-width: 220px;">
+              <label for="auditActionFilter" style="margin-top: 0;">Amal:</label>
+              <select id="auditActionFilter">
+                <option value="">Barchasi</option>
+                <option value="create_category">Kategoriya yaratish</option>
+                <option value="update_category">Kategoriya tahrirlash</option>
+                <option value="approve_master">Ustani tasdiqlash</option>
+                <option value="revoke_master_approval">Tasdiqni bekor qilish</option>
+                <option value="assign_master">Usta biriktirish</option>
+                <option value="cancel_order">Buyurtmani bekor qilish</option>
+                <option value="block_user">Foydalanuvchini bloklash</option>
+                <option value="unblock_user">Blokdan chiqarish</option>
+                <option value="resolve_dispute">Shikoyatni hal qilish</option>
+              </select>
+            </div>
+            <div>
+              <label for="auditAdminFilter" style="margin-top: 0;">Admin ID:</label>
+              <input id="auditAdminFilter" type="number" min="1" placeholder="Barchasi" style="width: 140px;" />
+            </div>
+          </div>
+
+          <p id="auditState" class="muted" aria-live="polite"></p>
+          <div id="auditRetryBox" style="display: none; margin-bottom: 12px;">
+            <button id="auditRetryBtn" class="btn btn-outline" type="button">Qayta urinish</button>
+          </div>
+
           <div class="table-wrap">
-            <table id="rejectionsTable" class="stack">
+            <table id="auditTable" class="stack" style="display: none;">
               <thead>
-                <tr><th>Usta</th><th>Rad etilgan takliflar</th></tr>
+                <tr>
+                  <th>Sana</th>
+                  <th>Admin</th>
+                  <th>Amal</th>
+                  <th>Nishon</th>
+                  <th>Tafsilot</th>
+                </tr>
               </thead>
-              <tbody id="rejectionsTbody"></tbody>
+              <tbody id="auditTbody"></tbody>
             </table>
           </div>
-        </div>
+        </section>
+
+        <!-- ================= TAB 6: STATISTIKA ================= -->
+        <section id="tabStats" style="display: none;">
+          <div class="card admin-toolbar" style="padding: 12px 16px;">
+            <label for="statsDaysFilter" style="margin: 0;">Davr:</label>
+            <select id="statsDaysFilter">
+              <option value="7">So'nggi 7 kun</option>
+              <option value="30" selected>So'nggi 30 kun</option>
+              <option value="90">So'nggi 90 kun</option>
+            </select>
+          </div>
+
+          <p id="statsState" class="muted" aria-live="polite"></p>
+          <div id="statsRetryBox" style="display: none; margin-bottom: 12px;">
+            <button id="statsRetryBtn" class="btn btn-outline" type="button">Qayta urinish</button>
+          </div>
+
+          <div id="statsContent" style="display: none;">
+            <div class="summary-grid summary-grid-4">
+              <div class="stat-card">
+                <div class="muted">Jami buyurtmalar</div>
+                <div id="statsTotalOrders" class="val">0</div>
+              </div>
+              <div class="stat-card">
+                <div class="muted">Yakunlangan buyurtmalar</div>
+                <div id="statsTotalCompleted" class="val">0</div>
+              </div>
+              <div class="stat-card">
+                <div class="muted">Jami komissiya</div>
+                <div id="statsTotalCommission" class="val">0 so'm</div>
+              </div>
+              <div class="stat-card">
+                <div class="muted">Yangi foydalanuvchilar</div>
+                <div id="statsTotalNewUsers" class="val">0</div>
+              </div>
+            </div>
+
+            <div class="card" style="padding: 16px; margin-top: 16px;">
+              <h3 style="margin-top: 0;">Kunlik buyurtmalar va komissiya</h3>
+              <canvas id="ordersChart" height="90"></canvas>
+            </div>
+
+            <div class="admin-charts-grid">
+              <div class="card" style="padding: 16px; margin-bottom: 0;">
+                <h3 style="margin-top: 0;">Top kategoriyalar</h3>
+                <canvas id="categoriesChart" height="120"></canvas>
+              </div>
+
+              <div class="card" style="padding: 16px; margin-bottom: 0;">
+                <h3 style="margin-top: 0;">Yangi foydalanuvchilar</h3>
+                <canvas id="usersChart" height="120"></canvas>
+              </div>
+            </div>
+
+            <div class="admin-charts-grid">
+              <div class="card" style="padding: 16px; margin-bottom: 0;">
+                <h3 style="margin-top: 0;">Top ustalar (bajarilgan ishlar bo'yicha)</h3>
+                <div class="table-wrap">
+                  <table id="topMastersTable" class="stack">
+                    <thead>
+                      <tr><th>Usta</th><th>Bajarilgan</th><th>Rad etilgan</th><th>Daromad</th></tr>
+                    </thead>
+                    <tbody id="topMastersTbody"></tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div class="card" style="padding: 16px; margin-bottom: 0;">
+                <h3 style="margin-top: 0;">Ko'p rad etadigan ustalar</h3>
+                <div class="table-wrap">
+                  <table id="rejectionsTable" class="stack">
+                    <thead>
+                      <tr><th>Usta</th><th>Rad etilgan takliflar</th></tr>
+                    </thead>
+                    <tbody id="rejectionsTbody"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
       </div>
-    </section>
+    </div>
 
     <!-- ================= BIRIKTIRISH MODALI ================= -->
     <div id="assignModal" class="modal-overlay" style="display: none;">
@@ -630,8 +655,16 @@
             name.textContent = m.full_name;
 
             const rating = document.createElement("span");
-            rating.className = m.rating_count > 0 ? "rating" : "badge";
-            rating.textContent = m.rating_count > 0 ? "★ " + m.rating_avg.toFixed(1) + " (" + m.rating_count + ")" : "Yangi";
+            if (m.rating_count > 0) {
+              rating.className = "rating";
+              rating.append(
+                createIcon("star", "icon-filled icon-sm"),
+                document.createTextNode(m.rating_avg.toFixed(1) + " (" + m.rating_count + ")")
+              );
+            } else {
+              rating.className = "badge";
+              rating.textContent = "Yangi";
+            }
 
             row.append(name, rating);
 
@@ -786,8 +819,13 @@
             tdProfile.setAttribute("data-label", "Profil / Reyting");
             if (u.role === "master" && u.profile_id) {
               const apprText = u.is_approved ? "Tasdiqlangan" : "Kutilmoqda";
-              const ratText = "★ " + (u.rating_avg != null ? u.rating_avg.toFixed(1) : "0.0") + " (" + (u.rating_count || 0) + ")";
-              tdProfile.textContent = apprText + " · " + ratText;
+              const ratSpan = document.createElement("span");
+              ratSpan.className = "rating";
+              ratSpan.append(
+                createIcon("star", "icon-filled icon-sm"),
+                document.createTextNode((u.rating_avg != null ? u.rating_avg.toFixed(1) : "0.0") + " (" + (u.rating_count || 0) + ")")
+              );
+              tdProfile.append(document.createTextNode(apprText + " · "), ratSpan);
             } else {
               tdProfile.textContent = "—";
             }
@@ -1278,7 +1316,11 @@
         }
       }
 
+      const disputeRoleFilter = document.getElementById("disputeRoleFilter");
+      const openDisputesBadge = document.getElementById("openDisputesBadge");
+
       disputeStatusFilter.addEventListener("change", () => loadDisputes());
+      if (disputeRoleFilter) disputeRoleFilter.addEventListener("change", () => loadDisputes());
       disputeRetryBtn.addEventListener("click", () => loadDisputes());
 
       const DISPUTE_STATUS_LABELS = {
@@ -1287,6 +1329,20 @@
         rejected: "Rad etildi",
       };
 
+      async function refreshOpenDisputesCount() {
+        if (!openDisputesBadge) return;
+        try {
+          const openList = await apiFetch("/admin/disputes?status=open");
+          const count = (openList || []).length;
+          if (count > 0) {
+            openDisputesBadge.textContent = String(count);
+            openDisputesBadge.style.display = "inline-flex";
+          } else {
+            openDisputesBadge.style.display = "none";
+          }
+        } catch (e) {}
+      }
+
       function renderDispute(d) {
         const card = document.createElement("div");
         card.className = "card";
@@ -1294,7 +1350,9 @@
         const head = document.createElement("div");
         head.className = "card-row";
         const title = document.createElement("strong");
-        title.textContent = "Buyurtma #" + d.order_id + " — " + d.category_name;
+        title.textContent = d.order_id
+          ? "Buyurtma #" + d.order_id + " — " + d.category_name
+          : "Umumiy shikoyat #" + d.id;
         const badge = document.createElement("span");
         badge.className = "badge";
         if (d.status === "open") {
@@ -1313,8 +1371,26 @@
 
         const meta = document.createElement("p");
         meta.className = "muted";
-        meta.style.margin = "4px 0";
-        meta.textContent = d.raised_by_name + " (" + formatRole(d.raised_by_role) + ") · " + formatDate(d.created_at);
+        meta.style.margin = "6px 0";
+        meta.style.display = "flex";
+        meta.style.alignItems = "center";
+        meta.style.flexWrap = "wrap";
+        meta.style.gap = "6px";
+
+        const roleBadge = document.createElement("span");
+        roleBadge.className = "badge";
+        roleBadge.style.background = d.raised_by_role === "master" ? "#dbeafe" : "#e0e7ff";
+        roleBadge.style.color = d.raised_by_role === "master" ? "#1e40af" : "#3730a3";
+        roleBadge.textContent = formatRole(d.raised_by_role);
+
+        const authorText = document.createElement("span");
+        authorText.textContent =
+          d.raised_by_name +
+          (d.raised_by_phone ? " (" + d.raised_by_phone + ")" : "") +
+          " · " +
+          formatDate(d.created_at);
+
+        meta.append(roleBadge, authorText);
         card.appendChild(meta);
 
         const reason = document.createElement("p");
@@ -1367,6 +1443,7 @@
               });
               toast("Shikoyat holati yangilandi", "success");
               loadDisputes();
+              refreshOpenDisputesCount();
             } catch (err) {
               toast(err.message, "error");
               resolveBtn.disabled = false;
@@ -1391,9 +1468,13 @@
         disputeState.textContent = "Yuklanmoqda...";
         disputeState.className = "muted";
         try {
-          const q = disputeStatusFilter.value ? "?status=" + encodeURIComponent(disputeStatusFilter.value) : "";
+          const params = new URLSearchParams();
+          if (disputeStatusFilter.value) params.set("status", disputeStatusFilter.value);
+          if (disputeRoleFilter && disputeRoleFilter.value) params.set("role", disputeRoleFilter.value);
+          const q = params.toString() ? "?" + params.toString() : "";
           const disputes = await apiFetch("/admin/disputes" + q);
           disputeRetryBtn.disabled = false;
+          refreshOpenDisputesCount();
           if (!disputes.length) {
             disputeState.textContent = "";
             const empty = document.createElement("div");
@@ -1714,7 +1795,18 @@
         }
       }
 
-      loadOrders();
+      refreshOpenDisputesCount();
+      startPolling(() => {
+        refreshOpenDisputesCount();
+        if (tabDisputes.style.display !== "none") loadDisputes();
+      }, 15000);
+
+      const initialTab = new URLSearchParams(window.location.search).get("tab");
+      if (initialTab && ["orders", "users", "commissions", "disputes", "chats", "audit", "stats"].includes(initialTab)) {
+        switchTab(initialTab);
+      } else {
+        loadOrders();
+      }
     })();
   </script>
 </body>

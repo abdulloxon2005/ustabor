@@ -5,12 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#2563eb" />
   <title>Usta profili - UstaBor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" />
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
   <header class="app-header">
-    <a class="brand" href="master-dashboard.html">UstaBor</a>
+    <a class="brand" href="master-dashboard.html"><span class="material-symbols-outlined" aria-hidden="true">handyman</span>UstaBor</a>
     <div class="header-actions">
+      <a class="btn btn-outline" href="complaints.html"><span class="material-symbols-outlined icon-sm" aria-hidden="true">report_problem</span>Shikoyatlar</a>
       <a class="btn btn-outline" href="master-dashboard.html">Takliflar</a>
       <button id="headerLogoutBtn" class="btn btn-outline" type="button">Chiqish</button>
     </div>
@@ -320,7 +324,7 @@
 
           const delBtn = document.createElement("button");
           delBtn.type = "button";
-          delBtn.textContent = "✕";
+          delBtn.appendChild(createIcon("close", "icon-sm"));
           delBtn.setAttribute("aria-label", "Rasmni o'chirish");
           delBtn.style.position = "absolute";
           delBtn.style.top = "4px";
@@ -333,6 +337,9 @@
           delBtn.style.borderRadius = "999px";
           delBtn.style.background = "rgba(17,24,39,0.75)";
           delBtn.style.color = "#fff";
+          delBtn.style.display = "inline-flex";
+          delBtn.style.alignItems = "center";
+          delBtn.style.justifyContent = "center";
           delBtn.style.cursor = "pointer";
           delBtn.addEventListener("click", async () => {
             if (!(await confirmModal("Bu rasmni o'chirishni xohlaysizmi?"))) return;

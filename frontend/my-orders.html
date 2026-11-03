@@ -5,12 +5,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#2563eb" />
   <title>Buyurtmalarim - UstaBor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" />
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
   <header class="app-header">
-    <a class="brand" href="index.html">UstaBor</a>
-    <a class="btn btn-accent" href="create-order.html">+ Yangi</a>
+    <a class="brand" href="index.html"><span class="material-symbols-outlined" aria-hidden="true">handyman</span>UstaBor</a>
+    <div class="header-actions">
+      <a class="btn btn-outline" href="complaints.html"><span class="material-symbols-outlined icon-sm" aria-hidden="true">report_problem</span>Shikoyatlar</a>
+      <a class="btn btn-accent" href="create-order.html"><span class="material-symbols-outlined icon-sm" aria-hidden="true">add</span>Yangi</a>
+    </div>
   </header>
 
   <main class="container">
@@ -260,12 +266,47 @@
           card.appendChild(btn);
         }
 
+        const actionRow = document.createElement("div");
+        actionRow.style.display = "flex";
+        actionRow.style.gap = "8px";
+        actionRow.style.marginTop = "10px";
+
         const detailLink = document.createElement("a");
-        detailLink.className = "btn btn-outline btn-block";
-        detailLink.style.marginTop = "10px";
-        detailLink.textContent = "Batafsil ko'rish →";
+        detailLink.className = "btn btn-outline";
+        detailLink.style.flex = "1";
+        detailLink.append(document.createTextNode("Batafsil ko'rish"), createIcon("arrow_forward", "icon-sm"));
         detailLink.href = "order-detail.html?id=" + encodeURIComponent(o.id);
-        card.appendChild(detailLink);
+
+        const complainBtn = document.createElement("button");
+        complainBtn.type = "button";
+        complainBtn.className = "btn btn-outline";
+        complainBtn.style.flex = "1";
+        complainBtn.style.color = "var(--err)";
+        complainBtn.style.borderColor = "#fecaca";
+        complainBtn.append(createIcon("report_problem", "icon-sm"), document.createTextNode("Shikoyat qilish"));
+        complainBtn.addEventListener("click", async () => {
+          const reason = await promptModal(
+            "Buyurtma #" + o.id + " (" + o.category_name + ") bo'yicha adminga shikoyat yuborish:",
+            { placeholder: "Muammoni batafsil yozing (kamida 5 ta belgi)...", okLabel: "Shikoyat yuborish", danger: true }
+          );
+          if (!reason) return;
+          if (reason.length < 5) {
+            toast("Shikoyat sababi kamida 5 ta belgidan iborat bo'lishi kerak", "error");
+            return;
+          }
+          try {
+            await apiFetch("/orders/my-disputes", {
+              method: "POST",
+              body: JSON.stringify({ order_id: o.id, reason }),
+            });
+            toast("Shikoyatingiz adminga yuborildi", "success");
+          } catch (err) {
+            toast(err.message, "error");
+          }
+        });
+
+        actionRow.append(detailLink, complainBtn);
+        card.appendChild(actionRow);
 
         return card;
       }

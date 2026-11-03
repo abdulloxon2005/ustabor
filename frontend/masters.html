@@ -5,12 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#2563eb" />
   <title>Ustalar - UstaBor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" />
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
   <header class="app-header">
-    <a class="brand" href="index.html">UstaBor</a>
-    <a class="btn btn-outline" href="index.html">Orqaga</a>
+    <a class="brand" href="index.html"><span class="material-symbols-outlined" aria-hidden="true">handyman</span>UstaBor</a>
+    <a class="btn btn-outline" href="index.html"><span class="material-symbols-outlined icon-sm" aria-hidden="true">arrow_back</span>Orqaga</a>
   </header>
 
   <main class="container">
@@ -113,6 +116,11 @@
       }
     }
 
+    function setFavBtnState(btn, isFav) {
+      btn.replaceChildren(createIcon("favorite", isFav ? "icon-filled" : ""));
+      btn.setAttribute("aria-label", isFav ? "Sevimlilardan olib tashlash" : "Sevimlilarga qo'shish");
+    }
+
     async function toggleFavorite(masterId, btn) {
       const isFav = favoriteIds.has(masterId);
       btn.disabled = true;
@@ -124,8 +132,7 @@
           await apiFetch("/masters/" + masterId + "/favorite", { method: "POST" });
           favoriteIds.add(masterId);
         }
-        btn.textContent = favoriteIds.has(masterId) ? "♥" : "♡";
-        btn.setAttribute("aria-label", favoriteIds.has(masterId) ? "Sevimlilardan olib tashlash" : "Sevimlilarga qo'shish");
+        setFavBtnState(btn, favoriteIds.has(masterId));
       } catch (e) {
         toast(e.message, "error");
       } finally {
@@ -164,9 +171,7 @@
         const favBtn = document.createElement("button");
         favBtn.type = "button";
         favBtn.className = "fav-btn-overlay";
-        const isFav = favoriteIds.has(m.id);
-        favBtn.textContent = isFav ? "♥" : "♡";
-        favBtn.setAttribute("aria-label", isFav ? "Sevimlilardan olib tashlash" : "Sevimlilarga qo'shish");
+        setFavBtnState(favBtn, favoriteIds.has(m.id));
         favBtn.addEventListener("click", () => toggleFavorite(m.id, favBtn));
         photoWrap.appendChild(favBtn);
       }
@@ -182,7 +187,10 @@
       const rating = document.createElement("span");
       if (m.rating_count > 0) {
         rating.className = "rating";
-        rating.textContent = "★ " + m.rating_avg.toFixed(1) + " (" + m.rating_count + " sharh)";
+        rating.append(
+          createIcon("star", "icon-filled icon-sm"),
+          document.createTextNode(m.rating_avg.toFixed(1) + " (" + m.rating_count + " sharh)")
+        );
       } else {
         rating.className = "badge";
         rating.textContent = "Yangi usta (0 sharh)";
@@ -251,7 +259,14 @@
       reviewsToggle.className = "btn btn-outline";
       reviewsToggle.style.padding = "0 12px";
       reviewsToggle.style.fontSize = "0.85rem";
-      reviewsToggle.textContent = "Sharhlar (" + m.rating_count + ") ▼";
+
+      function setReviewsToggleContent(isOpen) {
+        reviewsToggle.replaceChildren(
+          document.createTextNode(isOpen ? "Sharhlar" : "Sharhlar (" + m.rating_count + ")"),
+          createIcon(isOpen ? "expand_less" : "expand_more", "icon-sm")
+        );
+      }
+      setReviewsToggleContent(false);
 
       const reviewsList = document.createElement("div");
       reviewsList.style.display = "none";
@@ -276,16 +291,30 @@
           const items = res.reviews || res.items || [];
           reviewsList.replaceChildren();
 
-          const subAvgParts = [];
-          if (res.quality_avg != null) subAvgParts.push("Sifat: ★ " + res.quality_avg);
-          if (res.timeliness_avg != null) subAvgParts.push("Vaqtida kelish: ★ " + res.timeliness_avg);
-          if (res.price_avg != null) subAvgParts.push("Narx adolati: ★ " + res.price_avg);
-          if (subAvgParts.length) {
+          const subAvgEntries = [];
+          if (res.quality_avg != null) subAvgEntries.push(["Sifat", res.quality_avg]);
+          if (res.timeliness_avg != null) subAvgEntries.push(["Vaqtida kelish", res.timeliness_avg]);
+          if (res.price_avg != null) subAvgEntries.push(["Narx adolati", res.price_avg]);
+          if (subAvgEntries.length) {
             const avgP = document.createElement("p");
             avgP.className = "muted";
             avgP.style.margin = "0 0 8px";
             avgP.style.fontSize = "0.8rem";
-            avgP.textContent = subAvgParts.join(" · ");
+            avgP.style.display = "flex";
+            avgP.style.flexWrap = "wrap";
+            avgP.style.alignItems = "center";
+            avgP.style.gap = "6px";
+            subAvgEntries.forEach(([lbl, val], idx) => {
+              if (idx > 0) avgP.appendChild(document.createTextNode("·"));
+              const itemSpan = document.createElement("span");
+              itemSpan.style.display = "inline-flex";
+              itemSpan.style.alignItems = "center";
+              itemSpan.style.gap = "2px";
+              const starIcon = createIcon("star", "icon-filled icon-sm");
+              starIcon.style.color = "#f59e0b";
+              itemSpan.append(document.createTextNode(lbl + ": "), starIcon, document.createTextNode(String(val)));
+              avgP.appendChild(itemSpan);
+            });
             reviewsList.appendChild(avgP);
           }
 
@@ -309,9 +338,11 @@
               rAuthor.textContent = r.customer_first_name;
 
               const rMeta = document.createElement("span");
+              rMeta.style.display = "inline-flex";
+              rMeta.style.alignItems = "center";
               const rStars = document.createElement("span");
               rStars.className = "rating";
-              rStars.textContent = "★ " + r.rating;
+              rStars.append(createIcon("star", "icon-filled icon-sm"), document.createTextNode(String(r.rating)));
               rMeta.appendChild(rStars);
 
               if (r.created_at) {
@@ -357,13 +388,13 @@
       reviewsToggle.addEventListener("click", () => {
         if (reviewsList.style.display === "none") {
           reviewsList.style.display = "block";
-          reviewsToggle.textContent = "Sharhlar ▲";
+          setReviewsToggleContent(true);
           if (!reviewsLoaded) {
             fetchReviews();
           }
         } else {
           reviewsList.style.display = "none";
-          reviewsToggle.textContent = "Sharhlar (" + m.rating_count + ") ▼";
+          setReviewsToggleContent(false);
         }
       });
 

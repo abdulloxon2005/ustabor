@@ -14,7 +14,14 @@ function toast(message, type) {
   const el = document.createElement("div");
   el.className = "toast toast-" + type;
   el.setAttribute("role", "status");
-  el.textContent = message;
+  const iconName = type === "success" ? "check_circle" : type === "error" ? "error" : "info";
+  const textSpan = document.createElement("span");
+  textSpan.textContent = message;
+  if (typeof createIcon === "function") {
+    el.append(createIcon(iconName, "icon-filled icon-sm"), textSpan);
+  } else {
+    el.appendChild(textSpan);
+  }
   container.appendChild(el);
 
   requestAnimationFrame(() => el.classList.add("show"));
@@ -293,20 +300,11 @@ function createChatWidget(orderId, currentUserId) {
   wrap.className = "chat-widget";
 
   const title = document.createElement("div");
-  title.style.fontWeight = "600";
-  title.style.margin = "10px 0 6px";
-  title.textContent = "Xabarlar";
+  title.className = "chat-header";
+  title.append(createIcon("forum", "icon-sm"), document.createTextNode("Xabarlar"));
 
   const list = document.createElement("div");
-  list.style.display = "flex";
-  list.style.flexDirection = "column";
-  list.style.gap = "6px";
-  list.style.maxHeight = "240px";
-  list.style.overflowY = "auto";
-  list.style.marginBottom = "8px";
-  list.style.padding = "8px";
-  list.style.background = "var(--bg)";
-  list.style.borderRadius = "10px";
+  list.className = "chat-messages";
 
   const form = document.createElement("form");
   form.style.display = "flex";
@@ -325,7 +323,7 @@ function createChatWidget(orderId, currentUserId) {
   sendBtn.className = "btn";
   sendBtn.style.width = "auto";
   sendBtn.style.padding = "0 16px";
-  sendBtn.textContent = "Yuborish";
+  sendBtn.append(createIcon("send", "icon-sm"), document.createTextNode("Yuborish"));
 
   const errEl = document.createElement("div");
   errEl.className = "form-error";
@@ -354,20 +352,13 @@ function createChatWidget(orderId, currentUserId) {
     items.forEach((m) => {
       const mine = m.sender_id === currentUserId;
       const bubble = document.createElement("div");
-      bubble.style.alignSelf = mine ? "flex-end" : "flex-start";
-      bubble.style.maxWidth = "80%";
-      bubble.style.padding = "6px 10px";
-      bubble.style.borderRadius = "12px";
-      bubble.style.background = mine ? "var(--primary)" : "#fff";
-      bubble.style.color = mine ? "#fff" : "var(--text)";
-      bubble.style.border = mine ? "0" : "1px solid var(--border)";
-      bubble.style.fontSize = "0.9rem";
-      bubble.style.overflowWrap = "anywhere";
+      bubble.className = "chat-bubble " + (mine ? "mine" : "theirs");
 
       const nameEl = document.createElement("div");
-      nameEl.style.fontSize = "0.7rem";
-      nameEl.style.opacity = "0.75";
-      nameEl.style.fontWeight = "600";
+      nameEl.style.fontSize = "0.72rem";
+      nameEl.style.opacity = "0.8";
+      nameEl.style.fontWeight = "700";
+      nameEl.style.marginBottom = "2px";
       nameEl.textContent = mine ? "Siz" : m.sender_name;
 
       const bodyEl = document.createElement("div");
@@ -380,13 +371,15 @@ function createChatWidget(orderId, currentUserId) {
         reportBtn.type = "button";
         reportBtn.title = "Xabar haqida shikoyat qilish";
         reportBtn.setAttribute("aria-label", "Xabar haqida shikoyat qilish");
-        reportBtn.textContent = "⚠";
+        reportBtn.appendChild(createIcon("flag", "icon-sm"));
         reportBtn.style.border = "0";
         reportBtn.style.background = "transparent";
         reportBtn.style.cursor = "pointer";
         reportBtn.style.opacity = "0.6";
         reportBtn.style.float = "right";
         reportBtn.style.fontSize = "0.8rem";
+        reportBtn.style.padding = "2px";
+        reportBtn.style.color = "inherit";
         reportBtn.addEventListener("click", async () => {
           const reason = await promptModal(
             "Nima uchun shikoyat qilyapsiz?",
@@ -593,8 +586,11 @@ function mapLink(lat, lon) {
   a.href = "https://yandex.com/maps/?pt=" + lon + "," + lat + "&z=16&l=map";
   a.target = "_blank";
   a.rel = "noopener noreferrer";
-  a.textContent = "📍 Xaritada ko'rish";
+  a.style.display = "inline-flex";
+  a.style.alignItems = "center";
+  a.style.gap = "4px";
   a.style.fontSize = "0.85rem";
+  a.append(createIcon("location_on", "icon-sm"), document.createTextNode("Xaritada ko'rish"));
   return a;
 }
 
@@ -695,7 +691,7 @@ function createMapPicker({ initialLat, initialLon, onChange, autoLocate } = {}) 
   locateBtn.style.padding = "0 12px";
   locateBtn.title = "Joriy joylashuvim";
   locateBtn.setAttribute("aria-label", "Joriy joylashuvim");
-  locateBtn.textContent = "📍";
+  locateBtn.appendChild(createIcon("my_location"));
 
   searchRow.append(searchInput, searchBtn, locateBtn);
 
@@ -882,4 +878,36 @@ function createMapPicker({ initialLat, initialLon, onChange, autoLocate } = {}) 
     el: wrap,
     getCoords: () => coords,
   };
+}
+
+// Parol maydonlariga ko'rsatish/yashirish ("ko'z") tugmasini qo'shadi
+function initPasswordToggles() {
+  if (typeof createIcon !== "function") return;
+  document.querySelectorAll('input[type="password"]').forEach((input) => {
+    if (input.parentElement && input.parentElement.classList.contains("password-wrap")) return;
+    const wrap = document.createElement("div");
+    wrap.className = "password-wrap";
+    input.parentNode.insertBefore(wrap, input);
+    wrap.appendChild(input);
+
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "password-toggle-btn";
+    btn.setAttribute("aria-label", "Parolni ko'rsatish");
+    btn.appendChild(createIcon("visibility", "icon-sm"));
+
+    btn.addEventListener("click", () => {
+      const show = input.type === "password";
+      input.type = show ? "text" : "password";
+      btn.replaceChildren(createIcon(show ? "visibility_off" : "visibility", "icon-sm"));
+      btn.setAttribute("aria-label", show ? "Parolni yashirish" : "Parolni ko'rsatish");
+    });
+    wrap.appendChild(btn);
+  });
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", initPasswordToggles);
+} else {
+  initPasswordToggles();
 }

@@ -5,12 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#2563eb" />
   <title>Buyurtma tafsilotlari - UstaBor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" />
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
   <header class="app-header">
-    <a class="brand" href="index.html">UstaBor</a>
-    <a class="btn btn-outline" href="my-orders.html">Orqaga</a>
+    <a class="brand" href="index.html"><span class="material-symbols-outlined" aria-hidden="true">handyman</span>UstaBor</a>
+    <a class="btn btn-outline" href="my-orders.html"><span class="material-symbols-outlined icon-sm" aria-hidden="true">arrow_back</span>Orqaga</a>
   </header>
 
   <main class="container">
@@ -126,7 +129,7 @@
       let chatWidget = null;
       const disputeCardEl = document.getElementById("disputeCard");
       let disputeWidget = null;
-      const DISPUTE_ALLOWED_STATUSES = new Set(["in_progress", "completed", "cancelled"]);
+      const DISPUTE_ALLOWED_STATUSES = new Set(["assigned", "in_progress", "completed", "cancelled"]);
       const cancelBtn = document.getElementById("cancelBtn");
       const timelineListEl = document.getElementById("timelineList");
       const reviewSectionEl = document.getElementById("reviewSection");
@@ -383,7 +386,7 @@
           for (let i = 1; i <= 5; i++) {
             const s = document.createElement("button");
             s.type = "button";
-            s.textContent = "★";
+            s.appendChild(createIcon("star", "icon-filled"));
             s.setAttribute("aria-label", i + " yulduz");
             s.addEventListener("click", () => update(i));
             starEls.push(s);
@@ -493,10 +496,12 @@
           head.append(title, dateSpan);
 
           const ratingRow = document.createElement("div");
+          ratingRow.className = "rating";
           ratingRow.style.margin = "6px 0";
-          ratingRow.style.fontWeight = "600";
-          ratingRow.style.color = "#b45309";
-          ratingRow.textContent = "★ " + order.review.rating + " / 5";
+          ratingRow.append(
+            createIcon("star", "icon-filled icon-sm"),
+            document.createTextNode(order.review.rating + " / 5")
+          );
 
           card.append(head, ratingRow);
 
@@ -512,15 +517,31 @@
             ["timeliness_rating", "Vaqtida kelish"],
             ["price_rating", "Narx adolati"],
           ];
-          const subRow = document.createElement("div");
-          subRow.className = "muted";
-          subRow.style.marginTop = "6px";
-          subRow.style.fontSize = "0.85rem";
-          const subParts = subLabels
-            .filter(([key]) => order.review[key] != null)
-            .map(([key, label]) => label + ": ★ " + order.review[key]);
-          if (subParts.length) {
-            subRow.textContent = subParts.join(" · ");
+          const subEntries = subLabels.filter(([key]) => order.review[key] != null);
+          if (subEntries.length) {
+            const subRow = document.createElement("div");
+            subRow.className = "muted";
+            subRow.style.marginTop = "6px";
+            subRow.style.fontSize = "0.85rem";
+            subRow.style.display = "flex";
+            subRow.style.flexWrap = "wrap";
+            subRow.style.alignItems = "center";
+            subRow.style.gap = "6px";
+            subEntries.forEach(([key, label], idx) => {
+              if (idx > 0) subRow.appendChild(document.createTextNode("·"));
+              const itemSpan = document.createElement("span");
+              itemSpan.style.display = "inline-flex";
+              itemSpan.style.alignItems = "center";
+              itemSpan.style.gap = "2px";
+              const starIcon = createIcon("star", "icon-filled icon-sm");
+              starIcon.style.color = "#f59e0b";
+              itemSpan.append(
+                document.createTextNode(label + ": "),
+                starIcon,
+                document.createTextNode(String(order.review[key]))
+              );
+              subRow.appendChild(itemSpan);
+            });
             card.appendChild(subRow);
           }
 

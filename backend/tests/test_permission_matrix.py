@@ -81,6 +81,8 @@ PERMISSION_TABLE: dict[tuple[str, str], str | set[str]] = {
     ("POST", "/api/v1/orders/{order_id}/messages/{message_id}/report"): {"customer", "master"},
     ("GET", "/api/v1/orders/{order_id}/disputes"): {"customer", "master", "admin"},
     ("POST", "/api/v1/orders/{order_id}/dispute"): {"customer", "master"},
+    ("GET", "/api/v1/orders/my-disputes"): {"customer", "master"},
+    ("POST", "/api/v1/orders/my-disputes"): {"customer", "master"},
     # Master order action routes
     ("POST", "/api/v1/orders/{order_id}/accept"): {"master"},
     ("POST", "/api/v1/orders/{order_id}/reject"): {"master"},
@@ -348,6 +350,9 @@ def _render_request(
         },
         ("POST", "/api/v1/orders/{order_id}/dispute"): {
             "reason": "Usta vaqtida kelmadi",
+        },
+        ("POST", "/api/v1/orders/my-disputes"): {
+            "reason": "Shikoyat matni kamida besh belgi",
         },
         ("PATCH", "/api/v1/admin/disputes/{dispute_id}"): {
             "status": "resolved",
