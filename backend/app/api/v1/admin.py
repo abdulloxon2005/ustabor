@@ -6,7 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from app.api.deps import require_role
-from app.core.config import MAX_DB_INT
+from app.core.config import MAX_DB_INT, settings
 from app.db.session import get_db
 from app.models import (
     AdminAuditLog,
@@ -45,7 +45,7 @@ from app.schemas.mobile import (
     ChatReportOut, CommissionSettingsIn, CommissionSettingsOut,
     MasterLocationOut,
 )
-from app.services import admin_ops, notify
+from app.services import admin_ops, notify, sms
 from app.services import admin_analytics
 from app.services.order_flow import transition
 
@@ -613,6 +613,17 @@ def resolve_dispute(
     db.commit()
     db.refresh(dispute)
     return dispute
+
+
+# ==================== SMS (mock) ====================
+
+
+@router.get("/sms-outbox")
+def list_sms_outbox(limit: int = Query(default=50, ge=1, le=200)):
+    """Mock SMS orqali yuborilgan tasdiqlash kodlari (SMS_OUTBOX_VISIBLE=false bo'lsa o'chiriladi)."""
+    if not settings.SMS_OUTBOX_VISIBLE:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Topilmadi")
+    return sms.recent_messages(limit)
 
 
 # ==================== Audit log ====================

@@ -15,6 +15,9 @@ class Settings(BaseSettings):
 
     APP_NAME: str = "UstaBor"
     ENVIRONMENT: str = "development"
+    # SMS provayder ulanmaguncha admin panelda tasdiqlash kodlarini ko'rsatish.
+    # Haqiqiy SMS provayder ulangach .env da SMS_OUTBOX_VISIBLE=false qiling.
+    SMS_OUTBOX_VISIBLE: bool = True
     API_PREFIX: str = "/api/v1"
 
     # SQLite hozir, keyin PostgreSQL: faqat shu qiymat o'zgaradi

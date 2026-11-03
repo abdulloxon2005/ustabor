@@ -1,0 +1,58 @@
+﻿{
+    "expo":  {
+                 "name":  "UstaBor",
+                 "slug":  "ustabor-customer",
+                 "scheme":  "ustabor",
+                 "version":  "1.0.0",
+                 "orientation":  "portrait",
+                 "icon":  "./assets/icon.png",
+                 "userInterfaceStyle":  "light",
+                 "ios":  {
+                             "supportsTablet":  false,
+                             "bundleIdentifier":  "uz.ustabor.customer",
+                             "infoPlist":  {
+                                               "NSAppTransportSecurity":  {
+                                                                              "NSAllowsArbitraryLoads":  true
+                                                                          }
+                                           }
+                         },
+                 "android":  {
+                                 "package":  "uz.ustabor.customer",
+                                 "adaptiveIcon":  {
+                                                      "backgroundColor":  "#E6F4FE",
+                                                      "foregroundImage":  "./assets/android-icon-foreground.png",
+                                                      "backgroundImage":  "./assets/android-icon-background.png",
+                                                      "monochromeImage":  "./assets/android-icon-monochrome.png"
+                                                  },
+                                 "predictiveBackGestureEnabled":  false
+                             },
+                 "web":  {
+                             "favicon":  "./assets/favicon.png"
+                         },
+                 "plugins":  [
+                                 "expo-secure-store",
+                                 [
+                                     "expo-image-picker",
+                                     {
+                                         "photosPermission":  "Buyurtmaga rasm biriktirish uchun galereyaga ruxsat kerak."
+                                     }
+                                 ],
+                                 [
+                                     "expo-location",
+                                     {
+                                         "locationWhenInUsePermission":  "Yaqin atrofdagi ustalarni topish va buyurtma manzilini aniqlash uchun joylashuv kerak."
+                                     }
+                                 ],
+                                 "expo-font",
+                                 "expo-build-properties",
+                                 [
+                                     "expo-build-properties",
+                                     {
+                                         "android":  {
+                                                         "usesCleartextTraffic":  true
+                                                     }
+                                     }
+                                 ]
+                             ]
+             }
+}

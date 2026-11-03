@@ -29,6 +29,7 @@
           <button id="tabDisputesBtn" class="tab-btn" type="button" role="tab"><span class="material-symbols-outlined icon-sm" aria-hidden="true">report_problem</span>Shikoyatlar<span id="openDisputesBadge" class="badge" style="display: none; background: var(--err); color: #fff; font-size: 0.72rem; padding: 1px 7px; margin-left: auto;">0</span></button>
           <button id="tabChatsBtn" class="tab-btn" type="button" role="tab"><span class="material-symbols-outlined icon-sm" aria-hidden="true">forum</span>Chatlar</button>
           <button id="tabAuditBtn" class="tab-btn" type="button" role="tab"><span class="material-symbols-outlined icon-sm" aria-hidden="true">history</span>Audit</button>
+          <button id="tabSmsBtn" class="tab-btn" type="button" role="tab"><span class="material-symbols-outlined icon-sm" aria-hidden="true">sms</span>SMS kodlar</button>
           <button id="tabStatsBtn" class="tab-btn" type="button" role="tab"><span class="material-symbols-outlined icon-sm" aria-hidden="true">monitoring</span>Statistika</button>
         </div>
       </aside>
@@ -293,6 +294,30 @@
           </div>
         </section>
 
+        <!-- ================= TAB: SMS KODLAR (mock) ================= -->
+        <section id="tabSms" style="display: none;">
+          <div class="card" style="padding: 14px 16px;">
+            <p class="muted" style="margin: 0 0 10px;">
+              Ro'yxatdan o'tish va parolni tiklash uchun yuborilgan tasdiqlash kodlari (mock SMS).
+            </p>
+            <button id="smsRefreshBtn" class="btn btn-outline" type="button">Yangilash</button>
+          </div>
+          <p id="smsState" class="muted" aria-live="polite"></p>
+          <div class="table-wrap">
+            <table id="smsTable" class="stack" style="display: none;">
+              <thead>
+                <tr>
+                  <th>Vaqt (UTC)</th>
+                  <th>Telefon</th>
+                  <th>Kod</th>
+                  <th>Xabar</th>
+                </tr>
+              </thead>
+              <tbody id="smsTbody"></tbody>
+            </table>
+          </div>
+        </section>
+
         <!-- ================= TAB 6: STATISTIKA ================= -->
         <section id="tabStats" style="display: none;">
           <div class="card admin-toolbar" style="padding: 12px 16px;">
@@ -412,6 +437,7 @@
       const tabChatsBtn = document.getElementById("tabChatsBtn");
       const tabAuditBtn = document.getElementById("tabAuditBtn");
       const tabStatsBtn = document.getElementById("tabStatsBtn");
+      const tabSmsBtn = document.getElementById("tabSmsBtn");
 
       const tabOrders = document.getElementById("tabOrders");
       const tabUsers = document.getElementById("tabUsers");
@@ -420,6 +446,7 @@
       const tabChats = document.getElementById("tabChats");
       const tabAudit = document.getElementById("tabAudit");
       const tabStats = document.getElementById("tabStats");
+      const tabSms = document.getElementById("tabSms");
 
       function switchTab(tab) {
         tabOrdersBtn.classList.toggle("active", tab === "orders");
@@ -429,6 +456,7 @@
         tabChatsBtn.classList.toggle("active", tab === "chats");
         tabAuditBtn.classList.toggle("active", tab === "audit");
         tabStatsBtn.classList.toggle("active", tab === "stats");
+        tabSmsBtn.classList.toggle("active", tab === "sms");
 
         tabOrders.style.display = tab === "orders" ? "block" : "none";
         tabUsers.style.display = tab === "users" ? "block" : "none";
@@ -437,6 +465,7 @@
         tabChats.style.display = tab === "chats" ? "block" : "none";
         tabAudit.style.display = tab === "audit" ? "block" : "none";
         tabStats.style.display = tab === "stats" ? "block" : "none";
+        tabSms.style.display = tab === "sms" ? "block" : "none";
 
         if (tab === "orders") loadOrders();
         if (tab === "users") loadUsers();
@@ -445,6 +474,49 @@
         if (tab === "chats") loadChatReports();
         if (tab === "audit") loadAuditLog();
         if (tab === "stats") loadAnalytics();
+        if (tab === "sms") loadSmsOutbox();
+      }
+
+      tabSmsBtn.addEventListener("click", () => switchTab("sms"));
+
+      // ================= SMS KODLAR (mock) =================
+      const smsState = document.getElementById("smsState");
+      const smsTable = document.getElementById("smsTable");
+      const smsTbody = document.getElementById("smsTbody");
+      document.getElementById("smsRefreshBtn").addEventListener("click", () => loadSmsOutbox());
+
+      async function loadSmsOutbox() {
+        smsTbody.replaceChildren();
+        smsTable.style.display = "none";
+        smsState.textContent = "Yuklanmoqda...";
+        smsState.className = "muted";
+        try {
+          const items = await apiFetch("/admin/sms-outbox?limit=50");
+          if (!items.length) {
+            smsState.textContent = "Hozircha yuborilgan kodlar yo'q";
+            return;
+          }
+          smsState.textContent = items.length + " ta xabar (eng yangisi birinchi)";
+          items.forEach((m) => {
+            const tr = document.createElement("tr");
+            [m.created_at, m.phone, m.code || "-", m.text].forEach((val, i) => {
+              const td = document.createElement("td");
+              td.textContent = val;
+              if (i === 2) td.style.cssText = "font-weight: 700; font-size: 1.1rem; letter-spacing: 2px;";
+              tr.appendChild(td);
+            });
+            smsTbody.appendChild(tr);
+          });
+          smsTable.style.display = "table";
+        } catch (err) {
+          if (err.status === 403) {
+            renderForbidden(err.message);
+            return;
+          }
+          smsState.textContent =
+            err.status === 404 ? "Bu funksiya o'chirilgan (SMS_OUTBOX_VISIBLE=false)" : "Xatolik: " + err.message;
+          smsState.className = "err";
+        }
       }
 
       tabOrdersBtn.addEventListener("click", () => switchTab("orders"));
