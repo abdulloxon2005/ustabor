@@ -13,6 +13,16 @@ from app.services import push, sms
 
 logger = logging.getLogger("notifications")
 
+# SMS pullik va bezovta qiladi: faqat darhol harakat talab qiladigan hodisalar uchun.
+# Qolganlari ilova ichi bildirishnoma va push orqali boradi.
+SMS_NOTIFICATION_TYPES = frozenset({
+    "new_offer",
+    "order_assigned",
+    "order_completed",
+    "order_cancelled",
+    "master_approved",
+})
+
 
 def notify_user(
     db: Session,
@@ -33,7 +43,7 @@ def notify_user(
     db.flush()
 
     user = db.get(User, user_id)
-    if user is not None and user.phone:
+    if user is not None and user.phone and type in SMS_NOTIFICATION_TYPES:
         sms.send_sms(user.phone, f"{title}: {body}")
 
     if user is not None:

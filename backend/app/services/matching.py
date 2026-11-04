@@ -295,7 +295,9 @@ def broadcast_offers(
     return [create_offer(db, order, m) for m in masters]
 
 
-def rotate_stale_automatic_orders(db: Session, order: Order | None = None) -> int:
+def rotate_stale_automatic_orders(
+    db: Session, order: Order | None = None, customer_id: int | None = None
+) -> int:
     """Muddati o'tgan takliflarni tozalaydi va automatic qidiruvdagi
     buyurtmalarga hali taklif olmagan yangi mos ustalar bo'lsa ularga ham
     taklif yuboradi (masalan, usta endigina tasdiqlangan yoki bo'sh bo'lgan
@@ -309,6 +311,8 @@ def rotate_stale_automatic_orders(db: Session, order: Order | None = None) -> in
     )
     if order is not None:
         stmt = stmt.where(Order.id == order.id)
+    if customer_id is not None:
+        stmt = stmt.where(Order.customer_id == customer_id)
 
     auto_orders = db.scalars(stmt).all()
     count = 0

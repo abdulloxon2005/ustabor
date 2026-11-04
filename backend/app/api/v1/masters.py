@@ -1,7 +1,8 @@
+import math
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Body, Depends, File, HTTPException, Path, Query, UploadFile, status
-from sqlalchemy import delete, exists, func, select
+from sqlalchemy import delete, exists, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
@@ -585,8 +586,12 @@ def list_masters(
     city: str | None = None,
     district: str | None = None,
     q: str | None = Query(default=None, max_length=120),
+    limit: int = 50,
+    offset: int = Query(default=0, le=MAX_DB_INT),
     db: Session = Depends(get_db),
 ):
+    limit = min(max(limit, 1), 100)
+    offset = min(max(offset, 0), MAX_DB_INT)
     stmt = (
         select(MasterProfile)
         .join(User, User.id == MasterProfile.user_id)
@@ -615,7 +620,19 @@ def list_masters(
         stmt = stmt.where(func.lower(MasterProfile.district) == district.strip().lower())
     if q and q.strip():
         term = f"%{q.strip().lower()}%"
-        stmt = stmt.where(func.lower(User.full_name).like(term))
+        stmt = stmt.where(
+            or_(
+                func.lower(User.full_name).like(term),
+                func.lower(MasterProfile.bio).like(term),
+                exists().where(
+                    MasterService.master_id == MasterProfile.id,
+                    MasterService.category_id == Category.id,
+                    Category.is_active.is_(True),
+                    func.lower(Category.name).like(term),
+                ),
+            )
+        )
+    stmt = stmt.limit(limit).offset(offset)
     return [_public(p) for p in db.scalars(stmt).all()]
 
 
@@ -627,6 +644,9 @@ def nearby_masters(
     user: User = Depends(require_role(Role.CUSTOMER, Role.ADMIN)),
     db: Session = Depends(get_db),
 ):
+    # SQL darajasida bounding box bilan oldindan filtrlaymiz, aniq masofa Python'da.
+    lat_delta = radius_km / 111.0
+    lng_delta = radius_km / max(111.0 * math.cos(math.radians(latitude)), 0.001)
     profiles = db.scalars(
         select(MasterProfile)
         .join(User, User.id == MasterProfile.user_id)
@@ -636,6 +656,8 @@ def nearby_masters(
             MasterProfile.location_sharing_enabled.is_(True),
             MasterProfile.latitude.is_not(None),
             MasterProfile.longitude.is_not(None),
+            MasterProfile.latitude.between(latitude - lat_delta, latitude + lat_delta),
+            MasterProfile.longitude.between(longitude - lng_delta, longitude + lng_delta),
             User.is_active.is_(True),
         )
         .options(selectinload(MasterProfile.user))

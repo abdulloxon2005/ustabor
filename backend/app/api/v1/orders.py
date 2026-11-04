@@ -304,9 +304,14 @@ def get_dispatch_status(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Buyurtma topilmadi")
     if user.role == Role.MASTER:
         profile = db.scalar(select(MasterProfile).where(MasterProfile.user_id == user.id))
-        if profile is None or not db.scalar(select(OrderOffer.id).where(
-            OrderOffer.order_id == order.id, OrderOffer.master_id == profile.id
-        )) and order.master_id != profile.id:
+        has_offer = (
+            db.scalar(select(OrderOffer.id).where(
+                OrderOffer.order_id == order.id, OrderOffer.master_id == profile.id
+            ))
+            if profile is not None
+            else None
+        )
+        if profile is None or (has_offer is None and order.master_id != profile.id):
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Buyurtma topilmadi")
     if user.role not in {Role.CUSTOMER, Role.MASTER, Role.ADMIN}:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Ruxsat yo'q")
@@ -324,7 +329,7 @@ def list_orders(
     user: User = Depends(require_role(Role.CUSTOMER)),
     db: Session = Depends(get_db),
 ):
-    matching.rotate_stale_automatic_orders(db)
+    matching.rotate_stale_automatic_orders(db, customer_id=user.id)
     db.commit()
 
     limit = min(max(limit, 1), 100)
@@ -466,11 +471,11 @@ def get_order(
     user: User = Depends(require_role(Role.CUSTOMER)),
     db: Session = Depends(get_db),
 ):
-    db.expire_all()
-    matching.rotate_stale_automatic_orders(db)
-    db.commit()
     order = _own_order(order_id, user, db)
-    return _order_detail_out(order, db)
+    matching.rotate_stale_automatic_orders(db, order)
+    db.commit()
+    db.expire_all()
+    return _order_detail_out(_own_order(order_id, user, db), db)
 
 
 @router.post("/{order_id}/cancel", response_model=OrderOut)
@@ -480,7 +485,13 @@ def cancel_order(
     db: Session = Depends(get_db),
 ):
     order = _own_order(order_id, user, db)
+    master_user_id = order.master.user_id if order.master is not None else None
     transition(db, order, OrderStatus.CANCELLED, user)
+    if master_user_id is not None:
+        notify.notify_user(
+            db, master_user_id, "order_cancelled", "Buyurtma bekor qilindi",
+            f"#{order.id} buyurtma mijoz tomonidan bekor qilindi", order_id=order.id,
+        )
     db.commit()
     db.refresh(order)
     return _order_out(_own_order(order.id, user, db), db)
@@ -496,9 +507,11 @@ def select_master(
     user: User = Depends(require_role(Role.CUSTOMER)),
     db: Session = Depends(get_db),
 ):
-    # Muddati o'tgan takliflarni belgilash
-    matching.expire_stale_offers(db)
     order = _own_order(order_id, user, db)
+    # Muddati o'tgan takliflarni belgilash (faqat shu buyurtma uchun)
+    if matching.expire_stale_offers(db, order):
+        db.commit()
+        order = _own_order(order_id, user, db)
 
     if order.selection_mode != SelectionMode.MANUAL:
         raise HTTPException(
@@ -984,7 +997,11 @@ def create_order_message(
 
     msg = OrderMessage(order_id=order.id, sender_id=user.id, body=data.body)
     db.add(msg)
-    recipient_id = order.customer_id if user.role == Role.MASTER else order.master.user_id
+    recipient_id = (
+        order.customer_id
+        if user.role == Role.MASTER
+        else db.scalar(select(MasterProfile.user_id).where(MasterProfile.id == order.master_id))
+    )
     notify.notify_user(db, recipient_id, "new_message", "Yangi xabar",
                        f"#{order.id} buyurtmasida yangi xabar bor", order_id=order.id)
     db.commit()
