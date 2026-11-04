@@ -1,4 +1,4 @@
-"""Tasdiqlash kodi (OTP): yaratish, SMS (mock) orqali yuborish, tekshirish.
+﻿"""Tasdiqlash kodi (OTP): yaratish, SMS (mock) orqali yuborish, tekshirish.
 
 Diqqat — bu modul COMMIT QILMAYDI qoidasidan ataylab chetga chiqadi: noto'g'ri
 kod kiritilganda urinishlar soni (attempts) darhol saqlanishi kerak, aks holda
@@ -64,7 +64,7 @@ def request_otp(db: Session, phone: str, purpose: OtpPurpose) -> None:
     )
     db.add(otp)
     db.flush()
-    sms.send_sms(phone, f"UstaBor tasdiqlash kodi: {code}")
+    sms.send_sms(phone, f"SmartUsta tasdiqlash kodi: {code}")
 
 
 def verify_otp(db: Session, phone: str, purpose: OtpPurpose, code: str) -> None:

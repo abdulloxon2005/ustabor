@@ -1,4 +1,4 @@
-import React from "react";
+﻿import React from "react";
 import { Text } from "react-native";
 import { NavigationContainer } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
@@ -47,7 +47,7 @@ function Tabs() {
         headerTitleAlign: "left",
       })}
     >
-      <Tab.Screen name="Home" component={HomeScreen} options={{ title: "Bosh sahifa", headerTitle: "UstaBor" }} />
+      <Tab.Screen name="Home" component={HomeScreen} options={{ title: "Bosh sahifa", headerTitle: "SmartUsta" }} />
       <Tab.Screen name="Orders" component={OrdersScreen} options={{ title: "Buyurtmalar" }} />
       <Tab.Screen
         name="Notifications"

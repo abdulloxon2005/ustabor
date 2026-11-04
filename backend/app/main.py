@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+﻿from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -11,7 +11,7 @@ _is_prod = settings.ENVIRONMENT == "production"
 app = FastAPI(
     title=f"{settings.APP_NAME} API",
     version="0.1.0",
-    description="UstaBor MVP: mijoz va usta o'rtasidagi buyurtma platformasi",
+    description="SmartUsta MVP: mijoz va usta o'rtasidagi buyurtma platformasi",
     docs_url=None if _is_prod else "/docs",
     redoc_url=None if _is_prod else "/redoc",
     openapi_url=None if _is_prod else "/openapi.json",

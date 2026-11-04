@@ -1,4 +1,4 @@
-# UstaBor — serverga joylash (deploy) qo'llanmasi
+﻿# SmartUsta — serverga joylash (deploy) qo'llanmasi
 
 Docker Compose asosida: backend (FastAPI + SQLite), frontend (Nginx — statik fayllar +
 `/api/v1` va `/media` uchun proksi). Baza va yuklangan rasmlar Docker tomlarida
@@ -32,8 +32,8 @@ shu integratsiyani alohida so'rab qiling.
 ## 2. Kodni serverga olib kelish
 
 ```bash
-git clone https://github.com/abdulloxon2005/ustabor.git
-cd ustabor
+git clone https://github.com/abdulloxon2005/smartusta.git
+cd smartusta
 ```
 
 ## 3. Muhit sozlamalarini (`.env`) tayyorlash
@@ -48,7 +48,7 @@ cp backend/.env.production.example backend/.env
   ```bash
   docker compose run --rm backend python -c "import secrets; print(secrets.token_hex(32))"
   ```
-- `CORS_ORIGINS` — haqiqiy domeningiz, masalan `https://ustabor.uz`.
+- `CORS_ORIGINS` — haqiqiy domeningiz, masalan `https://smartusta.uz`.
 - `SEED_ADMIN_PHONE` va `SEED_ADMIN_PASSWORD` — admin akkaunt uchun kuchli parol
   (standart `admin12345` bilan qolsa, seed skripti ataylab ishdan chiqadi).
 - Ixtiyoriy: `YANDEX_GEOCODER_API_KEY`, `YANDEX_MAPS_JS_API_KEY` (xarita funksiyalari
@@ -70,7 +70,7 @@ Tekshirish:
 
 ```bash
 curl http://localhost/api/v1/health
-# {"status":"ok","database":"ok","app":"UstaBor","environment":"production"}
+# {"status":"ok","database":"ok","app":"SmartUsta","environment":"production"}
 ```
 
 Brauzerda `http://SERVER-IP/` ni oching — frontend ko'rinishi kerak.
@@ -115,7 +115,7 @@ sozlang:
 
 ```bash
 # crontab -e
-0 3 1 * * cd /path/to/ustabor && docker compose run --rm certbot renew --quiet && docker compose restart frontend
+0 3 1 * * cd /path/to/smartusta && docker compose run --rm certbot renew --quiet && docker compose restart frontend
 ```
 
 ## 7. Zaxira nusxa (backup)
@@ -131,7 +131,7 @@ Avtomatlashtirish uchun cron'ga qo'shing:
 
 ```bash
 # crontab -e — har kuni soat 03:00 da
-0 3 * * * cd /path/to/ustabor && docker compose exec -T backend python -m scripts.backup_db
+0 3 * * * cd /path/to/smartusta && docker compose exec -T backend python -m scripts.backup_db
 ```
 
 ## 8. Yangilash (yangi versiya chiqqanda)

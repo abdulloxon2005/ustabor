@@ -1,9 +1,9 @@
-# SmartUsta (UstaBor) — Qo'lda sinash jadvali (Manual Test Sheet)
+﻿# SmartUsta (SmartUsta) — Qo'lda sinash jadvali (Manual Test Sheet)
 
 **Tayyorgarlik:**
 1. `backend\` papkasidan virtual muhitni faollashtirib, baza va boshlang'ich ma'lumotlarni tayyorlang:
    ```cmd
-   cd D:\BMI\ustabor\backend
+   cd D:\BMI\smartusta\backend
    venv\Scripts\activate
    alembic upgrade head
    python -m scripts.seed
@@ -11,7 +11,7 @@
    ```
 2. `frontend\` papkasidan statik serverni ishga tushiring:
    ```cmd
-   cd D:\BMI\ustabor\frontend
+   cd D:\BMI\smartusta\frontend
    python -m http.server 5500
    ```
 3. Brauzerda `http://localhost:5500/index.html` sahifasini oching va DevTools (`F12` -> Device Toolbar `Ctrl+Shift+M`) orqali ekran kengligini **360px** (masalan, 360×800) ga o'rnating.

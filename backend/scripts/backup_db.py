@@ -1,4 +1,4 @@
-"""SQLite ma'lumotlar bazasidan xavfsiz zaxira nusxa (backup) olish skripti.
+﻿"""SQLite ma'lumotlar bazasidan xavfsiz zaxira nusxa (backup) olish skripti.
 
 Ishga tushirish (backend papkasidan):  python -m scripts.backup_db
 """
@@ -39,7 +39,7 @@ def backup_database(
     out_dir = Path(backup_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    dest_path = out_dir / f"ustabor_{timestamp}.db"
+    dest_path = out_dir / f"smartusta_{timestamp}.db"
 
     with closing(sqlite3.connect(src_path)) as src_conn, closing(
         sqlite3.connect(dest_path)

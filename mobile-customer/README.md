@@ -1,4 +1,4 @@
-# UstaBor — Mijozlar ilovasi (React Native / Expo)
+﻿# SmartUsta — Mijozlar ilovasi (React Native / Expo)
 
 Mavjud `backend` (FastAPI) uchun mijozlar mobil ilovasi. Ustalar ilovasi alohida qilinadi.
 

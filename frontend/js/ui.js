@@ -1,4 +1,4 @@
-// Umumiy UI yordamchilari: toast, tasdiqlash modali, avtomatik yangilanish (polling).
+﻿// Umumiy UI yordamchilari: toast, tasdiqlash modali, avtomatik yangilanish (polling).
 // Barcha sahifalarda api.js dan keyin yuklanadi.
 
 function toast(message, type) {
@@ -638,7 +638,7 @@ function requestAndCacheLocation() {
     .then(([lat, lon]) => {
       try {
         localStorage.setItem(
-          "ustabor_last_location",
+          "smartusta_last_location",
           JSON.stringify({ lat, lon, ts: Date.now() })
         );
       } catch (e) {}
@@ -648,7 +648,7 @@ function requestAndCacheLocation() {
 
 function _cachedLocation() {
   try {
-    const raw = localStorage.getItem("ustabor_last_location");
+    const raw = localStorage.getItem("smartusta_last_location");
     if (!raw) return null;
     const data = JSON.parse(raw);
     if (Date.now() - data.ts > 30 * 60 * 1000) return null; // 30 daqiqadan eski — eskirgan

@@ -1,10 +1,10 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+﻿import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import * as SecureStore from "expo-secure-store";
 import { authApi } from "../api";
 import { ApiError, setAuthToken, setUnauthorizedHandler } from "../api/client";
 import type { TokenOut, User } from "../api/types";
 
-const TOKEN_KEY = "ustabor_customer_token";
+const TOKEN_KEY = "smartusta_customer_token";
 
 interface AuthState {
   user: User | null;

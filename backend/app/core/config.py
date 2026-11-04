@@ -1,4 +1,4 @@
-from functools import lru_cache
+﻿from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -13,7 +13,7 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    APP_NAME: str = "UstaBor"
+    APP_NAME: str = "SmartUsta"
     ENVIRONMENT: str = "development"
     # SMS provayder ulanmaguncha admin panelda tasdiqlash kodlarini ko'rsatish.
     # Haqiqiy SMS provayder ulangach .env da SMS_OUTBOX_VISIBLE=false qiling.
@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     API_PREFIX: str = "/api/v1"
 
     # SQLite hozir, keyin PostgreSQL: faqat shu qiymat o'zgaradi
-    DATABASE_URL: str = "sqlite:///./ustabor.db"
+    DATABASE_URL: str = "sqlite:///./smartusta.db"
 
     # Majburiy: defolt qiymat yo'q, .env da bo'lishi shart
     SECRET_KEY: str

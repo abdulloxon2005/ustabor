@@ -1,4 +1,4 @@
-// Lokal ishlab chiqishda frontend alohida statik serverda (5500-port) ishlaydi,
+﻿// Lokal ishlab chiqishda frontend alohida statik serverda (5500-port) ishlaydi,
 // backend esa alohida jarayon sifatida 8000-portda — shuning uchun manzil host:8000
 // ga qurib beriladi (kompyuterda localhost, telefonda kompyuterning IP manzili).
 // Productionda (Docker/Nginx orqali) frontend va backend bitta domenda bo'ladi va
@@ -9,8 +9,8 @@ const API_BASE =
     ? `http://${window.location.hostname}:8000/api/v1`
     : "/api/v1";
 
-const TOKEN_KEY = "ustabor_token";
-const USER_KEY = "ustabor_user";
+const TOKEN_KEY = "smartusta_token";
+const USER_KEY = "smartusta_user";
 
 // ===== Umumiy holat va rol lug'atlari =====
 const ORDER_STATUS_LABELS = {

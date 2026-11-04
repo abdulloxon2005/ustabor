@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+﻿import React, { useState } from "react";
 import { Alert, Text, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { authApi } from "../api";
@@ -10,7 +10,7 @@ import { colors } from "../theme";
 function Header({ title, subtitle }: { title: string; subtitle: string }) {
   return (
     <View style={{ marginTop: 32, marginBottom: 28 }}>
-      <Text style={{ fontSize: 30, fontWeight: "800", color: colors.primary }}>UstaBor</Text>
+      <Text style={{ fontSize: 30, fontWeight: "800", color: colors.primary }}>SmartUsta</Text>
       <Text style={{ fontSize: 22, fontWeight: "700", color: colors.text, marginTop: 18 }}>{title}</Text>
       <Text style={{ color: colors.muted, marginTop: 4 }}>{subtitle}</Text>
     </View>

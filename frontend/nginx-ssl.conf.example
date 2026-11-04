@@ -1,4 +1,4 @@
-# UstaBor — HTTPS yoqilgandan keyin ishlatiladigan Nginx konfiguratsiyasi namunasi.
+﻿# SmartUsta — HTTPS yoqilgandan keyin ishlatiladigan Nginx konfiguratsiyasi namunasi.
 #
 # Qanday ishlatiladi (docs/deploy.md'da batafsil):
 #   1. Avval oddiy nginx.conf (HTTP) bilan saytni ishga tushiring va domenni DNS orqali
