@@ -207,7 +207,9 @@ def dispatch_next_wave(db: Session, order: Order) -> tuple[list[OrderOffer], str
 
     order.dispatch_radius_km = radius
     if not candidates:
-        return [], "exhausted"
+        # radius < 999 bo'lsa hali sinab ko'rilmagan katta radiuslar bor;
+        # "exhausted" faqat city-wide (999) pass ham bo'sh bo'lganda to'g'ri.
+        return [], "exhausted" if radius >= 999 else "searching"
     return [create_offer(db, order, master) for master in candidates], "offered"
 
 

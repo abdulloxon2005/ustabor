@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     # Narx taklifi uchun maksimal chegara (so'mda)
     QUOTE_MAX_PRICE: int = 100_000_000
 
-     # Faqat seed skript uchun (productionda .env orqali o'zgartiring)
+    # Faqat seed skript uchun (productionda .env orqali o'zgartiring)
     SEED_ADMIN_PHONE: str = "+998900000000"
     SEED_ADMIN_PASSWORD: str = "admin12345"
 

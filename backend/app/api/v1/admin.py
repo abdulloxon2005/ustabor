@@ -262,7 +262,7 @@ def set_master_approval(
 
 @router.get("/orders", response_model=list[AdminOrderListItem])
 def list_admin_orders(
-    status: OrderStatus | None = None,
+    status_filter: OrderStatus | None = Query(default=None, alias="status"),
     category_id: int | None = Query(default=None, le=MAX_DB_INT),
     city: str | None = None,
     master_id: int | None = Query(default=None, le=MAX_DB_INT),
@@ -281,8 +281,8 @@ def list_admin_orders(
         )
         .order_by(Order.created_at.desc(), Order.id.desc())
     )
-    if status is not None:
-        stmt = stmt.where(Order.status == status)
+    if status_filter is not None:
+        stmt = stmt.where(Order.status == status_filter)
     if category_id is not None:
         stmt = stmt.where(Order.category_id == category_id)
     if city and city.strip():

@@ -36,12 +36,12 @@ TERMINAL: frozenset[OrderStatus] = frozenset(s for s, nxt in TRANSITIONS.items()
 # Mijoz faqat o'z buyurtmasini va faqat shu holatlardan bekor qila oladi
 CUSTOMER_CANCELLABLE: frozenset[OrderStatus] = frozenset({S.SEARCHING, S.ASSIGNED})
 
-# Usta o'tishlari (keyingi kunlarda endpointlar chaqiradi). Usta faqat o'ziga
-# biriktirilgan buyurtmada ishlaydi: order.master_id == usta profili id.
-# searching -> assigned uchun chaqiruvchi avval order.master_id ni o'rnatadi.
+# Usta o'tishlari. Usta faqat o'ziga biriktirilgan buyurtmada ishlaydi:
+# order.master_id == usta profili id.
+# searching -> assigned o'tishi assign_master() orqali atomik bajariladi
+# (_check_actor ni bypass qiladi), shuning uchun bu yerda faqat biriktirilgandan
+# keyingi o'tishlar keltiriladi.
 MASTER_TRANSITIONS: frozenset[tuple[OrderStatus, OrderStatus]] = frozenset({
-    (S.SEARCHING, S.ASSIGNED),    # taklifni qabul qilish
-    (S.ASSIGNED, S.SEARCHING),    # voz kechish -> qayta qidiruv
     (S.ASSIGNED, S.IN_PROGRESS),  # ishni boshlash
     (S.IN_PROGRESS, S.COMPLETED), # ishni yakunlash
 })

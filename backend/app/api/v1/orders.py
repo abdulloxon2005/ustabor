@@ -243,7 +243,6 @@ def create_order(
             note = "Mos usta topilmadi"
 
     db.commit()
-    db.refresh(order)
     return _order_out(_own_order(order.id, user, db), db, note=note)
 
 
@@ -500,7 +499,6 @@ def cancel_order(
             f"#{order.id} buyurtma mijoz tomonidan bekor qilindi", order_id=order.id,
         )
     db.commit()
-    db.refresh(order)
     return _order_out(_own_order(order.id, user, db), db)
 
 
