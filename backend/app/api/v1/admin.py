@@ -687,10 +687,19 @@ def list_master_locations(
     admin: User = Depends(require_role(Role.ADMIN)),
     db: Session = Depends(get_db),
 ):
-    rows = db.scalars(select(MasterProfile).join(User).where(
-        MasterProfile.location_sharing_enabled.is_(True),
-        MasterProfile.latitude.is_not(None), MasterProfile.longitude.is_not(None),
-    ).order_by(MasterProfile.location_updated_at.desc()).offset(offset).limit(limit)).all()
+    rows = db.scalars(
+        select(MasterProfile)
+        .join(User)
+        .where(
+            MasterProfile.location_sharing_enabled.is_(True),
+            MasterProfile.latitude.is_not(None),
+            MasterProfile.longitude.is_not(None),
+        )
+        .options(selectinload(MasterProfile.user))
+        .order_by(MasterProfile.location_updated_at.desc())
+        .offset(offset)
+        .limit(limit)
+    ).all()
     result = [MasterLocationOut(
         master_id=p.id, full_name=p.user.full_name, latitude=p.latitude,
         longitude=p.longitude, location_updated_at=p.location_updated_at,

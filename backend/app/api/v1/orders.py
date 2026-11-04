@@ -248,9 +248,13 @@ def create_order(
 
 
 def _dispatch_status(order: Order, db: Session) -> DispatchStatusOut:
-    counts = dict(db.query(OrderOffer.status, func.count(OrderOffer.id))
-                  .filter(OrderOffer.order_id == order.id)
-                  .group_by(OrderOffer.status).all())
+    counts = dict(
+        db.execute(
+            select(OrderOffer.status, func.count(OrderOffer.id))
+            .where(OrderOffer.order_id == order.id)
+            .group_by(OrderOffer.status)
+        ).all()
+    )
     pending = counts.get(OfferStatus.PENDING, 0)
     rejected = counts.get(OfferStatus.REJECTED, 0)
     expired = counts.get(OfferStatus.EXPIRED, 0)
@@ -443,6 +447,9 @@ def create_my_dispute(
             )
             if profile is None or (order.master_id != profile.id and has_offer is None):
                 raise HTTPException(status.HTTP_404_NOT_FOUND, "Buyurtma topilmadi")
+
+        if order.status not in _DISPUTE_ALLOWED_STATUSES:
+            raise HTTPException(status.HTTP_409_CONFLICT, DISPUTE_WRONG_STATUS)
 
         existing_open = db.scalar(
             select(Dispute).where(
@@ -997,13 +1004,15 @@ def create_order_message(
 
     msg = OrderMessage(order_id=order.id, sender_id=user.id, body=data.body)
     db.add(msg)
-    recipient_id = (
-        order.customer_id
-        if user.role == Role.MASTER
-        else db.scalar(select(MasterProfile.user_id).where(MasterProfile.id == order.master_id))
-    )
-    notify.notify_user(db, recipient_id, "new_message", "Yangi xabar",
-                       f"#{order.id} buyurtmasida yangi xabar bor", order_id=order.id)
+    if user.role == Role.MASTER:
+        recipient_id: int | None = order.customer_id
+    else:
+        recipient_id = db.scalar(
+            select(MasterProfile.user_id).where(MasterProfile.id == order.master_id)
+        )
+    if recipient_id is not None:
+        notify.notify_user(db, recipient_id, "new_message", "Yangi xabar",
+                           f"#{order.id} buyurtmasida yangi xabar bor", order_id=order.id)
     db.commit()
     db.refresh(msg)
 

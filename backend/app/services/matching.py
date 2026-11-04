@@ -237,6 +237,27 @@ def create_offer(db: Session, order: Order, master: MasterProfile) -> OrderOffer
     return offer
 
 
+def expire_stale_offers_for_master(db: Session, master_profile_id: int) -> int:
+    """Faqat shu ustaning muddati o'tgan pending takliflarini expired qilib belgilaydi.
+    COMMIT QILMAYDI.
+    """
+    now = datetime.now(timezone.utc)
+    stmt = (
+        update(OrderOffer)
+        .where(
+            OrderOffer.master_id == master_profile_id,
+            OrderOffer.status == OfferStatus.PENDING,
+            OrderOffer.expires_at < now,
+        )
+        .values(status=OfferStatus.EXPIRED)
+        .execution_options(synchronize_session=False)
+    )
+    result = db.execute(stmt)
+    if result.rowcount > 0:
+        db.expire_all()
+    return result.rowcount
+
+
 def expire_stale_offers(db: Session, order: Order | None = None) -> int:
     """Muddati o'tgan pending takliflarni expired qilib belgilaydi. COMMIT QILMAYDI.
 

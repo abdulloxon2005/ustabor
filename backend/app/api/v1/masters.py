@@ -385,7 +385,7 @@ def get_my_orders(
     db: Session = Depends(get_db),
 ):
     profile = _own_profile(db, user)
-    matching.rotate_stale_automatic_orders(db)
+    matching.expire_stale_offers_for_master(db, profile.id)
     db.commit()
 
     offers_stmt = (

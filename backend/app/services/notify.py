@@ -6,6 +6,7 @@ COMMIT QILMAYDI — chaqiruvchi funksiya/endpoint o'z amali bilan birga commit q
 
 import logging
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import DeviceToken, Notification, User
@@ -47,8 +48,10 @@ def notify_user(
         sms.send_sms(user.phone, f"{title}: {body}")
 
     if user is not None:
-        tokens = db.query(DeviceToken).filter(
-            DeviceToken.user_id == user_id, DeviceToken.is_active.is_(True)
+        tokens = db.scalars(
+            select(DeviceToken).where(
+                DeviceToken.user_id == user_id, DeviceToken.is_active.is_(True)
+            )
         ).all()
         for device in tokens:
             try:
