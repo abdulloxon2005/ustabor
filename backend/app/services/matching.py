@@ -68,7 +68,8 @@ def score_master(master: MasterProfile, order: Order, global_avg: float) -> floa
       score = W_RATING * bayes_norm + W_DISTRICT * district_bonus
             + W_NEW * new_bonus + W_DISTANCE * distance_bonus
 
-    Yangi usta bonusi (0.15 * 0.5 = 0.075) reyting vaznidan (0.6 * ~0.8 = 0.48)
+    Vaznlar yig'indisi = 1.0 (0.55 + 0.20 + 0.10 + 0.15).
+    Yangi usta bonusi (0.10 * 0.5 = 0.05) reyting vaznidan (0.55 * ~0.8 = 0.44)
     ancha kichik, shuning uchun bitta 5 yulduzli sharh 50 ta 4.8 li ustadan
     oldinga o'ta olmaydi.
     """

@@ -51,11 +51,12 @@ class Settings(BaseSettings):
     # "Yangi usta" chegarasi: rating_count < shu qiymat = yangi
     MATCH_NEW_MASTER_THRESHOLD: int = 3
 
-    # Scoring vaznlari (har biri 0..1 oralig'ida, yig'indisi 1 bo'lishi shart emas)
-    MATCH_W_RATING: float = 0.6    # Bayes reyting
-    MATCH_W_DISTRICT: float = 0.25  # Tuman mos kelishi
-    MATCH_W_NEW_BONUS: float = 0.15 # Yangi usta bonusi
-    MATCH_W_DISTANCE: float = 0.2   # Masofa bonusi (koordinatalar bo'lsa)
+    # Scoring vaznlari — yig'indi = 1.0
+    # Reyting ustuvor: 0.55; joy: 0.20; masofa: 0.15; yangi usta: 0.10
+    MATCH_W_RATING: float = 0.55   # Bayes reyting
+    MATCH_W_DISTRICT: float = 0.20  # Tuman mos kelishi
+    MATCH_W_NEW_BONUS: float = 0.10 # Yangi usta bonusi
+    MATCH_W_DISTANCE: float = 0.15  # Masofa bonusi (koordinatalar bo'lsa)
 
     # ===== Yandex xarita/geokodlash (Bosqich 12) =====
     # Yandex har bir mahsulot uchun ALOHIDA kalit beradi — ikkalasi bir xil bo'lmaydi.
